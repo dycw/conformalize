@@ -15,5 +15,5 @@ jobs:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
         with:
           strategy: regex
-          root: .bumpversion.toml
+          root: pyproject.toml
           regex_pattern: 'current_version = "(?<version>\d+\.\d+\.\d+)"'
