@@ -6,7 +6,7 @@
 #   "dycw-utilities",
 #   "pytest-xdist",
 #   "tomlkit",
-#   "typed-settings[click]",
+#   "typed-settings[attrs, click]",
 # ]
 # ///
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 from logging import getLogger
 from pathlib import Path
 
-from click import command, option
+from click import command
 from tomlkit import dumps, parse
 from tomlkit.container import Container
 from typed_settings import click_options, settings
@@ -27,23 +27,17 @@ _LOGGER = getLogger(__name__)
 @settings()
 class Settings:
     pyproject_build_system: bool = False
+    dry_run: bool = False
 
 
 @command(**CONTEXT_SETTINGS_HELP_OPTION_NAMES)
-@click_options(Settings, "example")
-@option(
-    "--pyproject-build-system/--no-pyproject-build-system",
-    default=False,
-    show_default=True,
-    help="Add `pyproject.toml` [build-system]",
-)
-@option("--dry-run/--no-dry-run", default=False, show_default=True, help="Dry run")
-def main(*, pyproject_build_system: bool = False, dry_run: bool = False) -> None:
-    if dry_run:
+@click_options(Settings, "app", show_envvars_in_help=True)
+def main(settings: Settings, /) -> None:
+    if settings.dry_run:
         _LOGGER.info("Dry run; exiting...")
         return
     _LOGGER.info("Running...")
-    if pyproject_build_system:
+    if settings.pyproject_build_system:
         _add_pyproject_build_system()
 
 
