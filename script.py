@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from contextvars import ContextVar
 from logging import getLogger
 from pathlib import Path
 from re import search
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
 
 
 _LOGGER = getLogger(__name__)
+_MODIFIED = ContextVar("modified", default=False)
 
 
 @settings
@@ -147,6 +149,8 @@ def main(settings: Settings, /) -> None:
         _add_pytest_timeout(timeout)
     if settings.ruff:
         _add_ruff(version=settings.python_version)
+    if _MODIFIED.get():
+        exit(1)
 
 
 def _add_pre_commit() -> None:
@@ -456,6 +460,7 @@ def _run_bump_my_version() -> None:
                 tool = _get_table(doc, "tool")
                 bumpversion = _get_table(tool, "bumpversion")
                 bumpversion["current_version"] = str(patch)
+                _ = _MODIFIED.set(True)
 
 
 @contextmanager
@@ -649,12 +654,14 @@ def _yield_write_context[T](
         yield (default := get_default())
         _LOGGER.info("Writing '%s'%s...", path, "" if desc is None else f" {desc}")
         _ = path.write_text(writer(default))
+        _ = _MODIFIED.set(True)
     else:
         yield data
         current = reader(path.read_text())
         if data != current:
             _LOGGER.info("Adding '%s'%s...", path, "" if desc is None else f" {desc}")
             _ = path.write_text(writer(data))
+            _ = _MODIFIED.set(True)
 
 
 @contextmanager
