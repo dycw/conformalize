@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from click import command
 from tomlkit import TOMLDocument, aot, array, document, dumps, parse, table
 from tomlkit.items import AoT, Array, Table
-from typed_settings import click_options, settings
+from typed_settings import click_options, option, settings
 from utilities.click import CONTEXT_SETTINGS_HELP_OPTION_NAMES
 from utilities.functions import ensure_class
 from utilities.logging import basic_config
@@ -33,7 +33,7 @@ _LOGGER = getLogger(__name__)
 
 @settings()
 class Settings:
-    version: str = "3.14"
+    version: str = option(default="3.14", help="Python version")
     pyproject: bool = False
     pyproject__dependency_groups__dev: bool = False
     pyproject__project__name: str | None = None
