@@ -14,7 +14,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from click import command
 from tomlkit import TOMLDocument, aot, array, document, dumps, parse, table
@@ -90,10 +90,8 @@ def _add_pyproject_dependency_groups_dev(*, version: str = _SETTINGS.version) ->
     with _yield_pyproject_toml("[dependency-groups.dev]", version=version) as doc:
         dep_grps = _get_table(doc, "dependency-groups")
         dev = _get_array(dep_grps, "dev")
-        if (dycw := "dycw-utilities[test]") not in dev:
-            dev.append(dycw)
-        if (rich := "rich") not in dev:
-            dev.append(rich)
+        _ensure_in_array("dycw-utilities[test]", dev)
+        _ensure_in_array("rich", dev)
 
 
 def _add_pyproject_project_name(
@@ -113,8 +111,7 @@ def _add_pyproject_project_optional_dependencies_scripts(
         proj = _get_table(doc, "project")
         opt_deps = _get_table(proj, "optional-dependencies")
         scripts = _get_array(opt_deps, "scripts")
-        if (click := "click >=8.3.1") not in scripts:
-            scripts.append(click)
+        _ensure_in_array("click >=8.3.1", scripts)
 
 
 def _add_pyproject_uv_index(
@@ -128,8 +125,17 @@ def _add_pyproject_uv_index(
         index["explicit"] = True
         index["name"] = name
         index["url"] = url
-        if index not in indexes:
-            indexes.append(index)
+        _ensure_in_aot(index, indexes)
+
+
+def _ensure_in_aot(table: Table, array: AoT, /) -> None:
+    if table not in array:
+        array.append(table)
+
+
+def _ensure_in_array(obj: Any, array: Array, /) -> None:
+    if obj not in array:
+        array.append(obj)
 
 
 def _get_aot(obj: Container | Table, key: str, /) -> AoT:
@@ -174,16 +180,53 @@ def _yield_ruff_toml(
     doc = _get_doc(_RUFF_TOML)
     doc["target-version"] = f"py{version.replace('.', '')}"
     doc["unsafe-fixes"] = True
-    fmt = ensure_class(doc.setdefault("format", table()), Table)
+    fmt = _get_table(doc, "format")
     fmt["preview"] = True
     fmt["skip-magic-trailing-comma"] = True
-    lint = ensure_class(doc.setdefault("lint", table()), Table)
+    lint = _get_table(doc, "lint")
     lint["explicit-preview-rules"] = True
-    ensure_class(lint.setdefault("fixable", array()), Array)
-    lint["fixable"] = ["ALL"]
-    lint["ingore"]
-    project = ensure_class(doc.setdefault("project", table()), Table)
-    project["requires-python"] = f">= {version}"
+    fixable = _get_array(lint, "fixable")
+    _ensure_in_array("ALL", fixable)
+    ignore = _get_array(lint, "ignore")
+    for code in [
+        "ANN401",  # any-type
+        "ASYNC109",  # async-function-with-timeout
+        "C901",  # complex-structure
+        "CPY",  # flake8-copyright
+        "D",  # pydocstyle
+        "E501",  # line-too-long
+        "PD",  # pandas-vet
+        "PERF203",  # try-except-in-loop
+        "PLC0415",  # import-outside-top-level
+        "PLE1205",  # logging-too-many-args
+        "PLR0904",  # too-many-public-methods
+        "PLR0911",  # too-many-return-statements
+        "PLR0912",  # too-many-branches
+        "PLR0913",  # too-many-arguments
+        "PLR0915",  # too-many-statements
+        "PLR2004",  # magic-value-comparison
+        "PT012",  # pytest-raises-with-multiple-statements
+        "PT013",  # pytest-incorrect-pytest-import
+        "PYI041",  # redundant-numeric-union
+        "S202",  # tarfile-unsafe-members
+        "S310",  # suspicious-url-open-usage
+        "S311",  # suspicious-non-cryptographic-random-usage
+        "S602",  # subprocess-popen-with-shell-equals-true
+        "S603",  # subprocess-without-shell-equals-true
+        "S607",  # start-process-with-partial-path
+        # preview
+        "S101",  # assert
+        # formatter
+        "W191",  # tab-indentation
+        "E111",  # indentation-with-invalid-multiple
+        "E114",  # indentation-with-invalid-multiple-comment
+        "E117",  # over-indented
+        "COM812",  # missing-trailing-comma
+        "COM819",  # prohibited-trailing-comma
+        "ISC001",  # single-line-implicit-string-concatenation
+        "ISC002",  # multi-line-implicit-string-concatenation
+    ]:
+        _ensure_in_array(code, ignore)
     yield doc
     if doc != _get_doc(_RUFF_TOML):
         _LOGGER.info("Adding `ruff.toml` %s...", desc)
