@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from click import command
-from tomlkit import aot, array, dumps, parse, table
+from tomlkit import TOMLDocument, aot, array, document, dumps, parse, table
 from tomlkit.items import AoT, Array, Table
 from typed_settings import click_options, settings
 from utilities.click import CONTEXT_SETTINGS_HELP_OPTION_NAMES
@@ -27,21 +27,26 @@ from utilities.logging import basic_config
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from tomlkit.container import Container
     from utilities.types import PathLike
+
 
 _LOGGER = getLogger(__name__)
 
 
 @settings()
 class Settings:
-    pyproject__build_system: bool = False
+    version: str = "3.14"
+    pyproject: bool = False
     pyproject__dependency_groups__dev: bool = False
     pyproject__project__name: str | None = None
-    pyproject__project__requires_python: str | None = None
     pyproject__project__optional_dependencies__scripts: bool = False
     pyproject__tool__uv__indexes: str | None = None
+    ruff: bool = False
     dry_run: bool = False
+
+
+_PYPROJECT_TOML = Path("pyproject.toml")
+_SETTINGS = Settings()
 
 
 @command(**CONTEXT_SETTINGS_HELP_OPTION_NAMES)
@@ -51,14 +56,12 @@ def main(settings: Settings, /) -> None:
         _LOGGER.info("Dry run; exiting...")
         return
     _LOGGER.info("Running...")
-    if settings.pyproject__build_system:
-        _add_pyproject_build_system()
+    if settings.pyproject:
+        _add_pyproject(version=settings.version)
     if settings.pyproject__dependency_groups__dev:
-        _add_pyproject_dependency_groups_dev()
+        _add_pyproject_dependency_groups_dev(version=settings.version)
     if (name := settings.pyproject__project__name) is not None:
         _add_pyproject_project_name(name)
-    if (version := settings.pyproject__project__requires_python) is not None:
-        _add_pyproject_project_requires_python(version)
     if settings.pyproject__project__optional_dependencies__scripts:
         _add_pyproject_project_optional_dependencies_scripts()
     if (indexes := settings.pyproject__tool__uv__indexes) is not None:
@@ -67,22 +70,13 @@ def main(settings: Settings, /) -> None:
             _add_pyproject_uv_index(name, url)
 
 
-def _add_pyproject(*, path: PathLike = "pyproject.toml") -> None:
-    path = Path(path)
-    if not path.is_file():
-        _LOGGER.info("Adding `%s`...", path)
-        path.touch()
+def _add_pyproject(*, version: str = _SETTINGS.version) -> None:
+    with _yield_pyproject("[]", version=version):
+        ...
 
 
-def _add_pyproject_build_system(*, path: PathLike = "pyproject.toml") -> None:
-    with _yield_pyproject("[build-system]", path=path) as doc:
-        bld_sys = ensure_class(doc.setdefault("build-system", table()), Table)
-        bld_sys["build-backend"] = "uv_build"
-        bld_sys["requires"] = ["uv_build"]
-
-
-def _add_pyproject_dependency_groups_dev(*, path: PathLike = "pyproject.toml") -> None:
-    with _yield_pyproject("[dependency-groups]", path=path) as doc:
+def _add_pyproject_dependency_groups_dev(*, version: str = _SETTINGS.version) -> None:
+    with _yield_pyproject("[dependency-groups]", version=version) as doc:
         dep_grps = ensure_class(doc.setdefault("dependency-groups", table()), Table)
         dev = ensure_class(dep_grps.setdefault("dev", array()), Array)
         if (dycw := "dycw-utilities[test]") not in dev:
@@ -92,25 +86,19 @@ def _add_pyproject_dependency_groups_dev(*, path: PathLike = "pyproject.toml") -
 
 
 def _add_pyproject_project_name(
-    name: str, /, *, path: PathLike = "pyproject.toml"
+    name: str, /, *, path: PathLike = _PYPROJECT_TOML
 ) -> None:
     with _yield_pyproject("[project.name]", path=path) as doc:
         proj = ensure_class(doc.setdefault("project", table()), Table)
         proj["name"] = name
 
 
-def _add_pyproject_project_requires_python(
-    version: str, /, *, path: PathLike = "pyproject.toml"
-) -> None:
-    with _yield_pyproject("[project.name]", path=path) as doc:
-        proj = ensure_class(doc.setdefault("project", table()), Table)
-        proj["requires-python"] = f">={version}"
-
-
 def _add_pyproject_project_optional_dependencies_scripts(
-    *, path: PathLike = "pyproject.toml"
+    *, version: str = _SETTINGS.version
 ) -> None:
-    with _yield_pyproject("[project.optional-dependencies.scripts]", path=path) as doc:
+    with _yield_pyproject(
+        "[project.optional-dependencies.scripts]", version=version
+    ) as doc:
         proj = ensure_class(doc.setdefault("project", table()), Table)
         opt_deps = ensure_class(
             proj.setdefault("optional-dependencies", table()), Table
@@ -121,9 +109,9 @@ def _add_pyproject_project_optional_dependencies_scripts(
 
 
 def _add_pyproject_uv_index(
-    name: str, url: str, /, *, path: PathLike = "pyproject.toml"
+    name: str, url: str, /, *, version: str = _SETTINGS.version
 ) -> None:
-    with _yield_pyproject("[tool.uv.index]", path=path) as doc:
+    with _yield_pyproject("[tool.uv.index]", version=version) as doc:
         tool = ensure_class(doc.setdefault("tool", table()), Table)
         uv = ensure_class(tool.setdefault("uv", table()), Table)
         indexes = ensure_class(uv.setdefault("index", aot()), AoT)
@@ -137,16 +125,25 @@ def _add_pyproject_uv_index(
 
 @contextmanager
 def _yield_pyproject(
-    desc: str, /, *, path: PathLike = "pyproject.toml"
-) -> Iterator[Container]:
-    path = Path(path)
-    _add_pyproject(path=path)
-    temp = parse(path.read_text())
-    yield temp
-    current = parse(path.read_text())
-    if current != temp:
+    desc: str, /, *, version: str = _SETTINGS.version
+) -> Iterator[TOMLDocument]:
+    try:
+        doc = parse(_PYPROJECT_TOML.read_text())
+    except FileNotFoundError:
+        doc = document()
+    bld_sys = ensure_class(doc.setdefault("build-system", table()), Table)
+    bld_sys["build-backend"] = "uv_build"
+    bld_sys["requires"] = ["uv_build"]
+    project = ensure_class(doc.setdefault("project", table()), Table)
+    project["requires-python"] = f">= {version}"
+    yield doc
+    try:
+        current = parse(_PYPROJECT_TOML.read_text())
+    except FileNotFoundError:
+        current = document()
+    if current != doc:
         _LOGGER.info("Adding `pyproject.toml` %s...", desc)
-        _ = path.write_text(dumps(temp))
+        _ = _PYPROJECT_TOML.write_text(dumps(doc))
 
 
 if __name__ == "__main__":
