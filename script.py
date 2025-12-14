@@ -38,6 +38,7 @@ class Settings:
     pyproject__build_system: bool = False
     pyproject__dependency_groups: bool = False
     pyproject__project__name: str | None = None
+    pyproject__project__requires_python: str | None = None
     pyproject__tool__uv__indexes: str | None = None
     dry_run: bool = False
 
@@ -55,6 +56,8 @@ def main(settings: Settings, /) -> None:
         _add_pyproject_dependency_groups()
     if (name := settings.pyproject__project__name) is not None:
         _add_pyproject_project_name(name)
+    if (version := settings.pyproject__project__requires_python) is not None:
+        _add_pyproject_project_requires_python(version)
     if (indexes := settings.pyproject__tool__uv__indexes) is not None:
         for index in indexes.split("|"):
             name, url = index.split(",")
@@ -90,7 +93,15 @@ def _add_pyproject_project_name(
 ) -> None:
     with _yield_pyproject("[project.name]", path=path) as doc:
         proj = ensure_class(doc.setdefault("project", table()), Table)
-        _ = proj.setdefault("name", name)
+        proj["name"] = name
+
+
+def _add_pyproject_project_requires_python(
+    version: str, /, *, path: PathLike = "pyproject.toml"
+) -> None:
+    with _yield_pyproject("[project.name]", path=path) as doc:
+        proj = ensure_class(doc.setdefault("project", table()), Table)
+        proj["requires-python"] = f">={version}"
 
 
 def _add_pyproject_uv_index(
