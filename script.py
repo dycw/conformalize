@@ -16,6 +16,8 @@ import json
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
+from re import search
+from subprocess import check_output
 from typing import TYPE_CHECKING, Any, Literal, assert_never
 
 import tomlkit
@@ -28,6 +30,8 @@ from utilities.click import CONTEXT_SETTINGS_HELP_OPTION_NAMES
 from utilities.functions import ensure_class
 from utilities.iterables import OneEmptyError, one
 from utilities.logging import basic_config
+from utilities.pathlib import get_repo_root
+from utilities.version import Version, parse_version
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -41,7 +45,7 @@ _LOGGER = getLogger(__name__)
 
 @settings
 class Settings:
-    version: str = option(default="3.14", help="Python version")
+    python_version: str = option(default="3.14", help="Python version")
     pre_commit_dockerfmt: bool = option(
         default=False, help="Set up '.pre-commit-config.yaml' dockerfmt"
     )
@@ -117,20 +121,22 @@ def main(settings: Settings, /) -> None:
     if settings.pre_commit_uv:
         _add_pre_commit_uv()
     if settings.pyproject:
-        _add_pyproject(version=settings.version)
+        _add_pyproject(version=settings.python_version)
     if settings.pyproject__dependency_groups__dev:
-        _add_pyproject_dependency_groups_dev(version=settings.version)
+        _add_pyproject_dependency_groups_dev(version=settings.python_version)
     if (name := settings.pyproject__project__name) is not None:
-        _add_pyproject_project_name(name, version=settings.version)
+        _add_pyproject_project_name(name, version=settings.python_version)
     if settings.pyproject__project__optional_dependencies__scripts:
-        _add_pyproject_project_optional_dependencies_scripts(version=settings.version)
+        _add_pyproject_project_optional_dependencies_scripts(
+            version=settings.python_version
+        )
     if (indexes := settings.pyproject__tool__uv__indexes) is not None:
         for name, url in indexes:
-            _add_pyproject_uv_index(name, url, version=settings.version)
+            _add_pyproject_uv_index(name, url, version=settings.python_version)
     if settings.pyright:
-        _add_pyrightconfig(version=settings.version)
+        _add_pyrightconfig(version=settings.python_version)
     if (include := settings.pyright_include) is not None:
-        _add_pyrightconfig_include(*include, version=settings.version)
+        _add_pyrightconfig_include(*include, version=settings.python_version)
     if settings.pytest:
         _add_pytest()
     if settings.pytest_asyncio:
@@ -140,7 +146,7 @@ def main(settings: Settings, /) -> None:
     if (timeout := settings.pytest_timeout) is not None:
         _add_pytest_timeout(timeout)
     if settings.ruff:
-        _add_ruff(version=settings.version)
+        _add_ruff(version=settings.python_version)
 
 
 def _add_pre_commit() -> None:
@@ -236,17 +242,19 @@ def _add_pre_commit_uv() -> None:
         )
 
 
-def _add_pyproject(*, version: str = _SETTINGS.version) -> None:
+def _add_pyproject(*, version: str = _SETTINGS.python_version) -> None:
     with _yield_pyproject(version=version):
         ...
 
 
-def _add_pyrightconfig(*, version: str = _SETTINGS.version) -> None:
+def _add_pyrightconfig(*, version: str = _SETTINGS.python_version) -> None:
     with _yield_pyrightconfig(version=version):
         ...
 
 
-def _add_pyrightconfig_include(*paths: str, version: str = _SETTINGS.version) -> None:
+def _add_pyrightconfig_include(
+    *paths: str, version: str = _SETTINGS.python_version
+) -> None:
     with _yield_pyrightconfig(version=version) as dict_:
         include = _get_list(dict_, "include")
         _ensure_in_array(include, *paths)
@@ -282,13 +290,15 @@ def _add_pytest_timeout(timeout: int, /) -> None:
         pytest["timeout"] = str(timeout)
 
 
-def _add_ruff(*, version: str = _SETTINGS.version) -> None:
+def _add_ruff(*, version: str = _SETTINGS.python_version) -> None:
     with _yield_ruff(version=version):
         ...
 
 
-def _add_pyproject_dependency_groups_dev(*, version: str = _SETTINGS.version) -> None:
-    with _yield_pyproject("[dependency-groups.dev]", version=version) as doc:
+def _add_pyproject_dependency_groups_dev(
+    *, version: str = _SETTINGS.python_version
+) -> None:
+    with _yield_pyproject(desc="[dependency-groups.dev]", version=version) as doc:
         dep_grps = _get_table(doc, "dependency-groups")
         dev = _get_array(dep_grps, "dev")
         _ensure_in_array(dev, "dycw-utilities[test]")
@@ -296,18 +306,18 @@ def _add_pyproject_dependency_groups_dev(*, version: str = _SETTINGS.version) ->
 
 
 def _add_pyproject_project_name(
-    name: str, /, *, version: str = _SETTINGS.version
+    name: str, /, *, version: str = _SETTINGS.python_version
 ) -> None:
-    with _yield_pyproject("[project.name]", version=version) as doc:
+    with _yield_pyproject(desc="project.name", version=version) as doc:
         proj = _get_table(doc, "project")
         proj["name"] = name
 
 
 def _add_pyproject_project_optional_dependencies_scripts(
-    *, version: str = _SETTINGS.version
+    *, version: str = _SETTINGS.python_version
 ) -> None:
     with _yield_pyproject(
-        "[project.optional-dependencies.scripts]", version=version
+        desc="[project.optional-dependencies.scripts]", version=version
     ) as doc:
         proj = _get_table(doc, "project")
         opt_deps = _get_table(proj, "optional-dependencies")
@@ -316,9 +326,9 @@ def _add_pyproject_project_optional_dependencies_scripts(
 
 
 def _add_pyproject_uv_index(
-    name: str, url: str, /, *, version: str = _SETTINGS.version
+    name: str, url: str, /, *, version: str = _SETTINGS.python_version
 ) -> None:
-    with _yield_pyproject("[tool.uv.index]", version=version) as doc:
+    with _yield_pyproject(desc="[tool.uv.index]", version=version) as doc:
         tool = _get_table(doc, "tool")
         uv = _get_table(tool, "uv")
         indexes = _get_aot(uv, "index")
@@ -413,6 +423,18 @@ def _get_array(obj: Container | Table, key: str, /) -> Array:
     return ensure_class(obj.setdefault(key, array()), Array)
 
 
+def _get_version(obj: TOMLDocument | str, /) -> Version:
+    match obj:
+        case TOMLDocument() as doc:
+            tool = _get_table(doc, "tool")
+            bumpversion = _get_table(tool, "bumpversion")
+            return parse_version(str(bumpversion["current_version"]))
+        case str() as text:
+            return _get_version(tomlkit.parse(text))
+        case never:
+            assert_never(never)
+
+
 def _get_list(obj: dict[str, Any], key: str, /) -> list[Any]:
     return ensure_class(obj.setdefault(key, []), list)
 
@@ -422,18 +444,26 @@ def _get_table(obj: Container | Table, key: str, /) -> Table:
 
 
 def _run_bump_my_version() -> None:
-    with _yield_pyproject("[tool.uv.index]", version=version) as doc:
-        tool = _get_table(doc, "tool")
+    if not search("template", str(get_repo_root())):
+        text = check_output(
+            ["git", "show", "origin/master:.bumpversion.toml"], text=True
+        ).rstrip("\n")
+        prev = _get_version(text)
+        with _yield_bump_my_version() as doc:
+            current = _get_version(doc)
+            patch = prev.bump_patch()
+            if current not in {patch, prev.bump_minor(), prev.bump_major()}:
+                tool = _get_table(doc, "tool")
+                bumpversion = _get_table(tool, "bumpversion")
+                bumpversion["current_version"] = str(patch)
 
 
 @contextmanager
 def _yield_bump_my_version() -> Iterator[TOMLDocument]:
-    with _yield_toml_doc(".bumpmyversion.toml") as doc:
-        bld_sys = _get_table(doc, "build-system")
-        bld_sys["build-backend"] = "uv_build"
-        bld_sys["requires"] = ["uv_build"]
-        project = _get_table(doc, "project")
-        project["requires-python"] = f">= {version}"
+    with _yield_toml_doc(".bumpversion.toml") as doc:
+        tool = _get_table(doc, "tool")
+        bumpversion = _get_table(tool, "bumpversion")
+        bumpversion["allow_dirty"] = True
         yield doc
 
 
@@ -453,7 +483,7 @@ def _yield_pre_commit(*, desc: str | None = None) -> Iterator[dict[str, Any]]:
 
 @contextmanager
 def _yield_pyproject(
-    *, desc: str | None = None, version: str = _SETTINGS.version
+    *, desc: str | None = None, version: str = _SETTINGS.python_version
 ) -> Iterator[TOMLDocument]:
     with _yield_toml_doc("pyproject.toml", desc=desc) as doc:
         bld_sys = _get_table(doc, "build-system")
@@ -466,7 +496,7 @@ def _yield_pyproject(
 
 @contextmanager
 def _yield_pyrightconfig(
-    *, desc: str | None = None, version: str = _SETTINGS.version
+    *, desc: str | None = None, version: str = _SETTINGS.python_version
 ) -> Iterator[dict[str, Any]]:
     with _yield_json_dict("pyrightconfig.json", desc=desc) as dict_:
         dict_["deprecateTypingAliases"] = True
@@ -523,7 +553,7 @@ def _yield_pytest(desc: str, /) -> Iterator[TOMLDocument]:
 
 @contextmanager
 def _yield_ruff(
-    *, desc: str | None = None, version: str = _SETTINGS.version
+    *, desc: str | None = None, version: str = _SETTINGS.python_version
 ) -> Iterator[TOMLDocument]:
     with _yield_toml_doc("ruff.toml", desc=desc) as doc:
         doc["target-version"] = f"py{version.replace('.', '')}"
