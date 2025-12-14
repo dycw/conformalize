@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from click import command
-from tomlkit import array, dumps, parse, table
-from tomlkit.items import Array, Table
+from tomlkit import aot, array, dumps, parse, table
+from tomlkit.items import AoT, Array, Table
 from typed_settings import click_options, settings
 from utilities.click import CONTEXT_SETTINGS_HELP_OPTION_NAMES
 from utilities.functions import ensure_class
@@ -37,6 +37,7 @@ _LOGGER = getLogger(__name__)
 class Settings:
     pyproject__build_system: bool = False
     pyproject__dependency_groups: bool = False
+    pyproject__tool__uv__index: str | None = None
     dry_run: bool = False
 
 
@@ -51,6 +52,10 @@ def main(settings: Settings, /) -> None:
         _add_pyproject_build_system()
     if settings.pyproject__dependency_groups:
         _add_pyproject_dependency_groups()
+    if settings.pyproject__tool__uv__index is not None:
+        for index in settings.pyproject__tool__uv__index.split("|"):
+            name, url = index.split(",")
+            _add_pyproject_uv_index(name, url)
 
 
 def _add_pyproject(*, path: PathLike = "pyproject.toml") -> None:
@@ -67,7 +72,7 @@ def _add_pyproject_build_system(*, path: PathLike = "pyproject.toml") -> None:
         bs["requires"] = ["uv_build"]
 
 
-def _add_pyproject_dependency_groups(*, path: PathLike = "pyproject2.toml") -> None:
+def _add_pyproject_dependency_groups(*, path: PathLike = "pyproject.toml") -> None:
     with _yield_pyproject("[dependency-groups]", path=path) as doc:
         db = ensure_class(doc.setdefault("dependency-groups", table()), Table)
         dev = ensure_class(db.setdefault("dev", array()), Array)
@@ -75,6 +80,21 @@ def _add_pyproject_dependency_groups(*, path: PathLike = "pyproject2.toml") -> N
             dev.append(dycw)
         if (rich := "rich") not in dev:
             dev.append(rich)
+
+
+def _add_pyproject_uv_index(
+    name: str, url: str, /, *, path: PathLike = "pyproject.toml"
+) -> None:
+    with _yield_pyproject("[tool.uv.index]", path=path) as doc:
+        tool = ensure_class(doc.setdefault("tool", table()), Table)
+        uv = ensure_class(tool.setdefault("uv", table()), Table)
+        indexes = ensure_class(uv.setdefault("index", aot()), AoT)
+        index = table()
+        index["explicit"] = True
+        index["name"] = name
+        index["url"] = url
+        if index not in indexes:
+            indexes.append(index)
 
 
 @contextmanager
