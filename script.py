@@ -5,6 +5,7 @@
 #   "click",
 #   "dycw-utilities",
 #   "pytest-xdist",
+#   "pyyaml",
 #   "tomlkit",
 #   "typed-settings[attrs, click]",
 # ]
