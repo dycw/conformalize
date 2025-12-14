@@ -13,13 +13,17 @@ from __future__ import annotations
 
 from logging import getLogger
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from click import command
 from tomlkit import dumps, parse
-from tomlkit.container import Container
+from tomlkit.items import Table
 from typed_settings import click_options, settings
 from utilities.click import CONTEXT_SETTINGS_HELP_OPTION_NAMES
 from utilities.logging import basic_config
+
+if TYPE_CHECKING:
+    from utilities.types import PathLike
 
 _LOGGER = getLogger(__name__)
 
@@ -41,14 +45,14 @@ def main(settings: Settings, /) -> None:
         _add_pyproject_build_system()
 
 
-def _add_pyproject_build_system() -> None:
-    _add_pyproject()
-    path = Path("pyproject.toml")
+def _add_pyproject_build_system(*, path: PathLike = "pyproject.toml") -> None:
+    path = Path(path)
+    _add_pyproject(path=path)
     existing = parse(path.read_text())
     new = existing.copy()
     new.setdefault("build-system", {})
-    if not isinstance(build_system := new["build-system"], Container):
-        raise TypeError(build_system)
+    if not isinstance(build_system := new["build-system"], Table):
+        raise TypeError(build_system, type(build_system))
     build_system["build-backend"] = "uv_build"
     build_system["requires"] = ["uv_build"]
     if new != existing:
@@ -56,9 +60,10 @@ def _add_pyproject_build_system() -> None:
         _ = path.write_text(dumps(new))
 
 
-def _add_pyproject() -> None:
-    if not (path := Path("pyproject.toml")).is_file():
-        _LOGGER.info("Adding `pyproject.toml`...")
+def _add_pyproject(*, path: PathLike = "pyproject.toml") -> None:
+    path = Path(path)
+    if not path.is_file():
+        _LOGGER.info("Adding `%s`...", path)
         path.touch()
 
 
