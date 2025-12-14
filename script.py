@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager
 from logging import getLogger
-from os import read
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -87,6 +86,7 @@ def main(settings: Settings, /) -> None:
         _LOGGER.info("Dry run; exiting...")
         return
     _LOGGER.info("Running...")
+    _add_pre_commit()
     if settings.pre_commit_ruff:
         _add_pre_commit_ruff()
     if settings.pyproject:
@@ -117,8 +117,18 @@ def main(settings: Settings, /) -> None:
 
 
 def _add_pre_commit() -> None:
-    with _yield_pre_commit(""):
-        ...
+    with _yield_pre_commit("") as dict_:
+        repos = _get_list(dict_, "repos")
+        _ensure_partial_dict_in_array(
+            repos,
+            {"repo": "https://github.com/dycw/pre-commit-hook-nitpick"},
+            {"rev": "master", "hooks": [{"id": "nitpicke"}]},
+        )
+
+
+def _add_pre_commit_ruff() -> None:
+    with _yield_pre_commit("[ruff-pre-commit]") as dict_:
+        _get_list(dict_, "repos")
 
 
 def _add_pyproject(*, version: str = _SETTINGS.version) -> None:
@@ -238,6 +248,19 @@ def _ensure_not_in_array(array: Array, /, *objs: Any) -> None:
             del array[index]
 
 
+def _ensure_partial_dict_in_array(
+    array: list[Any], partial: dict[str, Any], remainder: dict[str, Any], /
+) -> None:
+    if not any(
+        d
+        for d in array
+        if isinstance(d, dict)
+        and set(partial).issubset(d)
+        and all(d[k] == v for k, v in partial.items())
+    ):
+        array.append(partial | remainder)
+
+
 def _get_aot(obj: Container | Table, key: str, /) -> AoT:
     return ensure_class(obj.setdefault(key, aot()), AoT)
 
@@ -250,22 +273,8 @@ def _get_list(obj: dict[str, Any], key: str, /) -> list[Any]:
     return ensure_class(obj.setdefault(key, []), list)
 
 
-def _get_toml_doc(path: PathLike, /) -> TOMLDocument:
-    try:
-        return tomlkit.parse(Path(path).read_text())
-    except FileNotFoundError:
-        return document()
-
-
 def _get_table(obj: Container | Table, key: str, /) -> Table:
     return ensure_class(obj.setdefault(key, table()), Table)
-
-
-def _get_yaml_dict(path: PathLike, /) -> dict[str, Any]:
-    try:
-        return yaml.safe_load(Path(path).read_text())
-    except FileNotFoundError:
-        return {}
 
 
 @contextmanager
@@ -461,12 +470,10 @@ def _yield_write_context[T](
 
 @contextmanager
 def _yield_yaml_dict(path: PathLike, desc: str, /) -> Iterator[dict[str, Any]]:
-    path = Path(path)
-    dict_ = _get_yaml_dict(path)
-    yield dict_
-    if dict_ != _get_yaml_dict(path):
-        _LOGGER.info("Adding '%s' %s...", path, desc)
-        _ = path.write_text(yaml.safe_dump(dict_))
+    with _yield_write_context(
+        path, yaml.safe_load, document, desc, yaml.safe_dump
+    ) as dict_:
+        yield dict_
 
 
 @contextmanager
@@ -475,12 +482,6 @@ def _yield_toml_doc(path: PathLike, desc: str, /) -> Iterator[TOMLDocument]:
         path, tomlkit.parse, document, desc, tomlkit.dumps
     ) as doc:
         yield doc
-    path = Path(path)
-    doc = _get_toml_doc(path)
-    yield doc
-    if doc != _get_toml_doc(path):
-        _LOGGER.info("Adding '%s' %s...", path, desc)
-        _ = path.write_text(tomlkit.dumps(doc))
 
 
 if __name__ == "__main__":
