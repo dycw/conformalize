@@ -5,6 +5,7 @@
 #   "click",
 #   "dycw-utilities",
 #   "pytest-xdist",
+#   "pyyaml",
 #   "tomlkit",
 #   "typed-settings[attrs, click]",
 # ]
@@ -18,16 +19,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import tomlkit
+import yaml
 from click import command
 from tomlkit import TOMLDocument, aot, array, document, table
 from tomlkit.items import AoT, Array, Table
 from typed_settings import click_options, option, settings
 from utilities.click import CONTEXT_SETTINGS_HELP_OPTION_NAMES
 from utilities.functions import ensure_class
+from utilities.iterables import OneEmptyError, one
 from utilities.logging import basic_config
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from tomlkit.container import Container
     from utilities.types import PathLike
@@ -39,6 +42,24 @@ _LOGGER = getLogger(__name__)
 @settings()
 class Settings:
     version: str = option(default="3.14", help="Python version")
+    pre_commit_dockerfmt: bool = option(
+        default=False, help="Set up '.pre-commit-config.yaml' [dockerfmt]"
+    )
+    pre_commit_prettier: bool = option(
+        default=False, help="Set up '.pre-commit-config.yaml' [prettier]"
+    )
+    pre_commit_ruff: bool = option(
+        default=False, help="Set up '.pre-commit-config.yaml' [ruff-pre-commit]"
+    )
+    pre_commit_shell: bool = option(
+        default=False, help="Set up '.pre-commit-config.yaml' [shell]"
+    )
+    pre_commit_taplo: bool = option(
+        default=False, help="Set up '.pre-commit-config.yaml' [taplo-pre-commit]"
+    )
+    pre_commit_uv: bool = option(
+        default=False, help="Set up '.pre-commit-config.yaml' [uv-pre-commit]"
+    )
     pyproject: bool = option(default=False, help="Set up 'pyproject.toml'")
     pyproject__dependency_groups__dev: bool = option(
         default=False, help="Set up 'pyproject.toml' [dependency-groups.dev]"
@@ -81,6 +102,19 @@ def main(settings: Settings, /) -> None:
         _LOGGER.info("Dry run; exiting...")
         return
     _LOGGER.info("Running...")
+    _add_pre_commit()
+    if settings.pre_commit_dockerfmt:
+        _add_pre_commit_dockerfmt()
+    if settings.pre_commit_prettier:
+        _add_pre_commit_prettier()
+    if settings.pre_commit_ruff:
+        _add_pre_commit_ruff()
+    if settings.pre_commit_shell:
+        _add_pre_commit_shell()
+    if settings.pre_commit_taplo:
+        _add_pre_commit_taplo()
+    if settings.pre_commit_uv:
+        _add_pre_commit_uv()
     if settings.pyproject:
         _add_pyproject(version=settings.version)
     if settings.pyproject__dependency_groups__dev:
@@ -106,6 +140,92 @@ def main(settings: Settings, /) -> None:
         _add_pytest_timeout(timeout)
     if settings.ruff:
         _add_ruff(version=settings.version)
+
+
+def _add_pre_commit() -> None:
+    url = "https://github.com/pre-commit/pre-commit-hooks"
+    with _yield_pre_commit("") as dict_:
+        _ensure_pre_commit_repo(
+            dict_, "https://github.com/dycw/pre-commit-hook-nitpick", "nitpick"
+        )
+        _ensure_pre_commit_repo(dict_, url, "check-executables-have-shebangs")
+        _ensure_pre_commit_repo(dict_, url, "check-merge-conflict")
+        _ensure_pre_commit_repo(dict_, url, "check-symlinks")
+        _ensure_pre_commit_repo(dict_, url, "destroyed-symlinks")
+        _ensure_pre_commit_repo(dict_, url, "detect-private-key")
+        _ensure_pre_commit_repo(dict_, url, "end-of-file-fixer")
+        _ensure_pre_commit_repo(dict_, url, "mixed-line-ending", args=["--fix=lf"])
+        _ensure_pre_commit_repo(dict_, url, "no-commit-to-branch")
+        _ensure_pre_commit_repo(dict_, url, "pretty-format-json", args=["--autofix"])
+        _ensure_pre_commit_repo(dict_, url, "no-commit-to-branch")
+        _ensure_pre_commit_repo(dict_, url, "trailing-whitespace")
+
+
+def _add_pre_commit_dockerfmt() -> None:
+    with _yield_pre_commit("[dockerfmt]") as dict_:
+        _ensure_pre_commit_repo(
+            dict_,
+            "https://github.com/reteps/dockerfmt",
+            "dockerfmt",
+            args=["--newline", "--write"],
+        )
+
+
+def _add_pre_commit_prettier() -> None:
+    with _yield_pre_commit("[prettier]") as dict_:
+        _ensure_pre_commit_repo(
+            dict_,
+            "local",
+            "prettier",
+            name="prettier",
+            entry="npx prettier --write",
+            language="system",
+            types_or=["markdown", "yaml"],
+        )
+
+
+def _add_pre_commit_ruff() -> None:
+    url = "https://github.com/astral-sh/ruff-pre-commit"
+    with _yield_pre_commit("[ruff-pre-commit]") as dict_:
+        _ensure_pre_commit_repo(dict_, url, "ruff-check", args=["--fix"])
+        _ensure_pre_commit_repo(dict_, url, "ruff-format")
+
+
+def _add_pre_commit_shell() -> None:
+    with _yield_pre_commit("[shell]") as dict_:
+        _ensure_pre_commit_repo(
+            dict_, "https://github.com/scop/pre-commit-shfmt", "shfmt"
+        )
+        _ensure_pre_commit_repo(
+            dict_, "https://github.com/koalaman/shellcheck-precommit", "shellcheck"
+        )
+
+
+def _add_pre_commit_taplo() -> None:
+    with _yield_pre_commit("[taplo-pre-commit]") as dict_:
+        _ensure_pre_commit_repo(
+            dict_,
+            "https://github.com/compwa/taplo-pre-commit",
+            "taplo-format",
+            args=[
+                "--option",
+                "indent_tables=true",
+                "--option",
+                "indent_entries=true",
+                "--option",
+                "reorder_keys=true",
+            ],
+        )
+
+
+def _add_pre_commit_uv() -> None:
+    with _yield_pre_commit("[uv-pre-commit]") as dict_:
+        repos = _get_list(dict_, "repos")
+        _ensure_partial_dict_in_array(
+            repos,
+            {"repo": "https://github.com/astral-sh/uv-pre-commit"},
+            {"rev": "master", "hooks": [{"id": "uv-lock", "args": ["--upgrade"]}]},
+        )
 
 
 def _add_pyproject(*, version: str = _SETTINGS.version) -> None:
@@ -225,6 +345,54 @@ def _ensure_not_in_array(array: Array, /, *objs: Any) -> None:
             del array[index]
 
 
+def _ensure_partial_dict_in_array(
+    array: list[Any], partial: dict[str, Any], /, *, extra: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    try:
+        return one(
+            d
+            for d in array
+            if isinstance(d, dict)
+            and set(partial).issubset(d)
+            and all(d[k] == v for k, v in partial.items())
+        )
+    except OneEmptyError:
+        dict_ = partial | ({} if extra is None else extra)
+        array.append(dict_)
+        return dict_
+
+
+def _ensure_pre_commit_repo(
+    pre_commit_dict: dict[str, Any],
+    url: str,
+    id_: str,
+    /,
+    *,
+    name: str | None = None,
+    entry: str | None = None,
+    language: str | None = None,
+    types_or: list[str] | None = None,
+    args: list[str] | None = None,
+) -> None:
+    repos_list = _get_list(pre_commit_dict, "repos")
+    repo_dict = _ensure_partial_dict_in_array(
+        repos_list, {"repo": url}, extra={"rev": "master"}
+    )
+    hooks_list = _get_list(repo_dict, "hooks")
+    hook_dict = _ensure_partial_dict_in_array(hooks_list, {"id": id_})
+    if name is not None:
+        hook_dict["name"] = name
+    if entry is not None:
+        hook_dict["entry"] = entry
+    if language is not None:
+        hook_dict["language"] = language
+    if types_or is not None:
+        hook_dict["types_or"] = types_or
+    if args is not None:
+        hook_args = _get_list(hook_dict, "args")
+        _ensure_in_array(hook_args, *args)
+
+
 def _get_aot(obj: Container | Table, key: str, /) -> AoT:
     return ensure_class(obj.setdefault(key, aot()), AoT)
 
@@ -233,22 +401,8 @@ def _get_array(obj: Container | Table, key: str, /) -> Array:
     return ensure_class(obj.setdefault(key, array()), Array)
 
 
-def _get_json_dict(path: PathLike, /) -> dict[str, Any]:
-    try:
-        return json.loads(Path(path).read_text())
-    except FileNotFoundError:
-        return {}
-
-
 def _get_list(obj: dict[str, Any], key: str, /) -> list[Any]:
     return ensure_class(obj.setdefault(key, []), list)
-
-
-def _get_toml_doc(path: PathLike, /) -> TOMLDocument:
-    try:
-        return tomlkit.parse(Path(path).read_text())
-    except FileNotFoundError:
-        return document()
 
 
 def _get_table(obj: Container | Table, key: str, /) -> Table:
@@ -257,22 +411,14 @@ def _get_table(obj: Container | Table, key: str, /) -> Table:
 
 @contextmanager
 def _yield_json_dict(path: PathLike, desc: str, /) -> Iterator[dict[str, Any]]:
-    path = Path(path)
-    dict_ = _get_json_dict(path)
-    yield dict_
-    if dict_ != _get_json_dict(path):
-        _LOGGER.info("Adding '%s' %s...", path, desc)
-        _ = path.write_text(json.dumps(dict_))
+    with _yield_write_context(path, json.loads, dict, desc, json.dumps) as dict_:
+        yield dict_
 
 
 @contextmanager
-def _yield_toml_doc(path: PathLike, desc: str, /) -> Iterator[TOMLDocument]:
-    path = Path(path)
-    doc = _get_toml_doc(path)
-    yield doc
-    if doc != _get_toml_doc(path):
-        _LOGGER.info("Adding '%s' %s...", path, desc)
-        _ = path.write_text(tomlkit.dumps(doc))
+def _yield_pre_commit(desc: str, /) -> Iterator[dict[str, Any]]:
+    with _yield_yaml_dict(".pre-commit-config", desc) as dict_:
+        yield dict_
 
 
 @contextmanager
@@ -427,6 +573,46 @@ def _yield_ruff(
         req_imps = _get_array(isort, "required-imports")
         _ensure_in_array(req_imps, "from __future__ import annotations")
         isort["split-on-trailing-comma"] = False
+        yield doc
+
+
+@contextmanager
+def _yield_write_context[T](
+    path: PathLike,
+    reader: Callable[[str], T],
+    get_default: Callable[[], T],
+    desc: str,
+    writer: Callable[[T], str],
+    /,
+) -> Iterator[T]:
+    path = Path(path)
+    try:
+        data = reader(path.read_text())
+    except FileNotFoundError:
+        yield (default := get_default())
+        _LOGGER.info("Adding '%s' %s...", path, desc)
+        _ = path.write_text(writer(default))
+    else:
+        yield data
+        current = reader(path.read_text())
+        if data != current:
+            _LOGGER.info("Adding '%s' %s...", path, desc)
+            _ = path.write_text(writer(data))
+
+
+@contextmanager
+def _yield_yaml_dict(path: PathLike, desc: str, /) -> Iterator[dict[str, Any]]:
+    with _yield_write_context(
+        path, yaml.safe_load, document, desc, yaml.safe_dump
+    ) as dict_:
+        yield dict_
+
+
+@contextmanager
+def _yield_toml_doc(path: PathLike, desc: str, /) -> Iterator[TOMLDocument]:
+    with _yield_write_context(
+        path, tomlkit.parse, document, desc, tomlkit.dumps
+    ) as doc:
         yield doc
 
 
