@@ -43,22 +43,22 @@ _LOGGER = getLogger(__name__)
 class Settings:
     version: str = option(default="3.14", help="Python version")
     pre_commit_dockerfmt: bool = option(
-        default=False, help="Set up '.pre-commit-config.yaml' [dockerfmt]"
+        default=False, help="Set up '.pre-commit-config.yaml' dockerfmt"
     )
     pre_commit_prettier: bool = option(
-        default=False, help="Set up '.pre-commit-config.yaml' [prettier]"
+        default=False, help="Set up '.pre-commit-config.yaml' prettier"
     )
     pre_commit_ruff: bool = option(
-        default=False, help="Set up '.pre-commit-config.yaml' [ruff-pre-commit]"
+        default=False, help="Set up '.pre-commit-config.yaml' ruff"
     )
     pre_commit_shell: bool = option(
-        default=False, help="Set up '.pre-commit-config.yaml' [shell]"
+        default=False, help="Set up '.pre-commit-config.yaml' shell"
     )
     pre_commit_taplo: bool = option(
-        default=False, help="Set up '.pre-commit-config.yaml' [taplo-pre-commit]"
+        default=False, help="Set up '.pre-commit-config.yaml' taplo"
     )
     pre_commit_uv: bool = option(
-        default=False, help="Set up '.pre-commit-config.yaml' [uv-pre-commit]"
+        default=False, help="Set up '.pre-commit-config.yaml' uv"
     )
     pyproject: bool = option(default=False, help="Set up 'pyproject.toml'")
     pyproject__dependency_groups__dev: bool = option(
@@ -102,6 +102,7 @@ def main(settings: Settings, /) -> None:
         _LOGGER.info("Dry run; exiting...")
         return
     _LOGGER.info("Running...")
+    _run_bump_my_version()
     _add_pre_commit()
     if settings.pre_commit_dockerfmt:
         _add_pre_commit_dockerfmt()
@@ -144,7 +145,7 @@ def main(settings: Settings, /) -> None:
 
 def _add_pre_commit() -> None:
     url = "https://github.com/pre-commit/pre-commit-hooks"
-    with _yield_pre_commit("") as dict_:
+    with _yield_pre_commit() as dict_:
         _ensure_pre_commit_repo(
             dict_, "https://github.com/dycw/pre-commit-hook-nitpick", "nitpick"
         )
@@ -166,7 +167,7 @@ def _add_pre_commit() -> None:
 
 
 def _add_pre_commit_dockerfmt() -> None:
-    with _yield_pre_commit("[dockerfmt]") as dict_:
+    with _yield_pre_commit(desc="dockerfmt") as dict_:
         _ensure_pre_commit_repo(
             dict_,
             "https://github.com/reteps/dockerfmt",
@@ -176,7 +177,7 @@ def _add_pre_commit_dockerfmt() -> None:
 
 
 def _add_pre_commit_prettier() -> None:
-    with _yield_pre_commit("[prettier]") as dict_:
+    with _yield_pre_commit(desc="prettier") as dict_:
         _ensure_pre_commit_repo(
             dict_,
             "local",
@@ -190,13 +191,13 @@ def _add_pre_commit_prettier() -> None:
 
 def _add_pre_commit_ruff() -> None:
     url = "https://github.com/astral-sh/ruff-pre-commit"
-    with _yield_pre_commit("[ruff-pre-commit]") as dict_:
+    with _yield_pre_commit(desc="ruff") as dict_:
         _ensure_pre_commit_repo(dict_, url, "ruff-check", args=("add", ["--fix"]))
         _ensure_pre_commit_repo(dict_, url, "ruff-format")
 
 
 def _add_pre_commit_shell() -> None:
-    with _yield_pre_commit("[shell]") as dict_:
+    with _yield_pre_commit(desc="shell") as dict_:
         _ensure_pre_commit_repo(
             dict_, "https://github.com/scop/pre-commit-shfmt", "shfmt"
         )
@@ -206,7 +207,7 @@ def _add_pre_commit_shell() -> None:
 
 
 def _add_pre_commit_taplo() -> None:
-    with _yield_pre_commit("[taplo-pre-commit]") as dict_:
+    with _yield_pre_commit(desc="taplo") as dict_:
         _ensure_pre_commit_repo(
             dict_,
             "https://github.com/compwa/taplo-pre-commit",
@@ -226,7 +227,7 @@ def _add_pre_commit_taplo() -> None:
 
 
 def _add_pre_commit_uv() -> None:
-    with _yield_pre_commit("[uv-pre-commit]") as dict_:
+    with _yield_pre_commit(desc="uv") as dict_:
         _ensure_pre_commit_repo(
             dict_,
             "https://github.com/astral-sh/uv-pre-commit",
@@ -236,17 +237,17 @@ def _add_pre_commit_uv() -> None:
 
 
 def _add_pyproject(*, version: str = _SETTINGS.version) -> None:
-    with _yield_pyproject("", version=version):
+    with _yield_pyproject(version=version):
         ...
 
 
 def _add_pyrightconfig(*, version: str = _SETTINGS.version) -> None:
-    with _yield_pyrightconfig("", version=version):
+    with _yield_pyrightconfig(version=version):
         ...
 
 
 def _add_pyrightconfig_include(*paths: str, version: str = _SETTINGS.version) -> None:
-    with _yield_pyrightconfig("", version=version) as dict_:
+    with _yield_pyrightconfig(version=version) as dict_:
         include = _get_list(dict_, "include")
         _ensure_in_array(include, *paths)
 
@@ -282,7 +283,7 @@ def _add_pytest_timeout(timeout: int, /) -> None:
 
 
 def _add_ruff(*, version: str = _SETTINGS.version) -> None:
-    with _yield_ruff("[]", version=version):
+    with _yield_ruff(version=version):
         ...
 
 
@@ -420,23 +421,41 @@ def _get_table(obj: Container | Table, key: str, /) -> Table:
     return ensure_class(obj.setdefault(key, table()), Table)
 
 
+def _run_bump_my_version() -> None:
+    with _yield_pyproject("[tool.uv.index]", version=version) as doc:
+        tool = _get_table(doc, "tool")
+
+
 @contextmanager
-def _yield_json_dict(path: PathLike, desc: str, /) -> Iterator[dict[str, Any]]:
-    with _yield_write_context(path, json.loads, dict, desc, json.dumps) as dict_:
+def _yield_bump_my_version() -> Iterator[TOMLDocument]:
+    with _yield_toml_doc(".bumpmyversion.toml") as doc:
+        bld_sys = _get_table(doc, "build-system")
+        bld_sys["build-backend"] = "uv_build"
+        bld_sys["requires"] = ["uv_build"]
+        project = _get_table(doc, "project")
+        project["requires-python"] = f">= {version}"
+        yield doc
+
+
+@contextmanager
+def _yield_json_dict(
+    path: PathLike, /, *, desc: str | None = None
+) -> Iterator[dict[str, Any]]:
+    with _yield_write_context(path, json.loads, dict, json.dumps, desc=desc) as dict_:
         yield dict_
 
 
 @contextmanager
-def _yield_pre_commit(desc: str, /) -> Iterator[dict[str, Any]]:
-    with _yield_yaml_dict(".pre-commit-config.yaml", desc) as dict_:
+def _yield_pre_commit(*, desc: str | None = None) -> Iterator[dict[str, Any]]:
+    with _yield_yaml_dict(".pre-commit-config.yaml", desc=desc) as dict_:
         yield dict_
 
 
 @contextmanager
 def _yield_pyproject(
-    desc: str, /, *, version: str = _SETTINGS.version
+    *, desc: str | None = None, version: str = _SETTINGS.version
 ) -> Iterator[TOMLDocument]:
-    with _yield_toml_doc("pyproject.toml", desc) as doc:
+    with _yield_toml_doc("pyproject.toml", desc=desc) as doc:
         bld_sys = _get_table(doc, "build-system")
         bld_sys["build-backend"] = "uv_build"
         bld_sys["requires"] = ["uv_build"]
@@ -447,9 +466,9 @@ def _yield_pyproject(
 
 @contextmanager
 def _yield_pyrightconfig(
-    desc: str, /, *, version: str = _SETTINGS.version
+    *, desc: str | None = None, version: str = _SETTINGS.version
 ) -> Iterator[dict[str, Any]]:
-    with _yield_json_dict("pyrightconfig.json", desc) as dict_:
+    with _yield_json_dict("pyrightconfig.json", desc=desc) as dict_:
         dict_["deprecateTypingAliases"] = True
         dict_["enableReachabilityAnalysis"] = False
         dict_["pythonVersion"] = version
@@ -479,7 +498,7 @@ def _yield_pyrightconfig(
 
 @contextmanager
 def _yield_pytest(desc: str, /) -> Iterator[TOMLDocument]:
-    with _yield_toml_doc("pytest.toml", desc) as doc:
+    with _yield_toml_doc("pytest.toml", desc=desc) as doc:
         pytest = _get_table(doc, "pytest")
         addopts = _get_array(pytest, "addopts")
         _ensure_in_array(
@@ -504,9 +523,9 @@ def _yield_pytest(desc: str, /) -> Iterator[TOMLDocument]:
 
 @contextmanager
 def _yield_ruff(
-    desc: str, /, *, version: str = _SETTINGS.version
+    *, desc: str | None = None, version: str = _SETTINGS.version
 ) -> Iterator[TOMLDocument]:
-    with _yield_toml_doc("ruff.toml", desc) as doc:
+    with _yield_toml_doc("ruff.toml", desc=desc) as doc:
         doc["target-version"] = f"py{version.replace('.', '')}"
         doc["unsafe-fixes"] = True
         fmt = _get_table(doc, "format")
@@ -588,37 +607,42 @@ def _yield_write_context[T](
     path: PathLike,
     reader: Callable[[str], T],
     get_default: Callable[[], T],
-    desc: str,
     writer: Callable[[T], str],
     /,
+    *,
+    desc: str | None = None,
 ) -> Iterator[T]:
     path = Path(path)
     try:
         data = reader(path.read_text())
     except FileNotFoundError:
         yield (default := get_default())
-        _LOGGER.info("Adding '%s' %s...", path, desc)
+        _LOGGER.info("Writing '%s'%s...", path, "" if desc is None else f" {desc}")
         _ = path.write_text(writer(default))
     else:
         yield data
         current = reader(path.read_text())
         if data != current:
-            _LOGGER.info("Adding '%s' %s...", path, desc)
+            _LOGGER.info("Adding '%s'%s...", path, "" if desc is None else f" {desc}")
             _ = path.write_text(writer(data))
 
 
 @contextmanager
-def _yield_yaml_dict(path: PathLike, desc: str, /) -> Iterator[dict[str, Any]]:
+def _yield_yaml_dict(
+    path: PathLike, /, *, desc: str | None = None
+) -> Iterator[dict[str, Any]]:
     with _yield_write_context(
-        path, yaml.safe_load, document, desc, yaml.safe_dump
+        path, yaml.safe_load, document, yaml.safe_dump, desc=desc
     ) as dict_:
         yield dict_
 
 
 @contextmanager
-def _yield_toml_doc(path: PathLike, desc: str, /) -> Iterator[TOMLDocument]:
+def _yield_toml_doc(
+    path: PathLike, /, *, desc: str | None = None
+) -> Iterator[TOMLDocument]:
     with _yield_write_context(
-        path, tomlkit.parse, document, desc, tomlkit.dumps
+        path, tomlkit.parse, document, tomlkit.dumps, desc=desc
     ) as doc:
         yield doc
 
