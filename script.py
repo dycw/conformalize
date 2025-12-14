@@ -121,10 +121,22 @@ def main(settings: Settings, /) -> None:
 
 
 def _add_pre_commit() -> None:
+    url = "https://github.com/pre-commit/pre-commit-hooks"
     with _yield_pre_commit("") as dict_:
         _ensure_pre_commit_repo(
             dict_, "https://github.com/dycw/pre-commit-hook-nitpick", "nitpick"
         )
+        _ensure_pre_commit_repo(dict_, url, "check-executables-have-shebangs")
+        _ensure_pre_commit_repo(dict_, url, "check-merge-conflict")
+        _ensure_pre_commit_repo(dict_, url, "check-symlinks")
+        _ensure_pre_commit_repo(dict_, url, "destroyed-symlinks")
+        _ensure_pre_commit_repo(dict_, url, "detect-private-key")
+        _ensure_pre_commit_repo(dict_, url, "end-of-file-fixer")
+        _ensure_pre_commit_repo(dict_, url, "mixed-line-ending", args=["--fix=lf"])
+        _ensure_pre_commit_repo(dict_, url, "no-commit-to-branch")
+        _ensure_pre_commit_repo(dict_, url, "pretty-format-json", args=["--autofix"])
+        _ensure_pre_commit_repo(dict_, url, "no-commit-to-branch")
+        _ensure_pre_commit_repo(dict_, url, "trailing-whitespace")
 
 
 def _add_pre_commit_dockerfmt() -> None:
@@ -157,10 +169,13 @@ def _add_pre_commit_ruff() -> None:
         _ensure_pre_commit_repo(dict_, url, "ruff-format")
 
 
-def _add_pre_commit_shfmt() -> None:
-    with _yield_pre_commit("[pre-commit-shfmt]") as dict_:
+def _add_pre_commit_shell() -> None:
+    with _yield_pre_commit("[shell]") as dict_:
         _ensure_pre_commit_repo(
             dict_, "https://github.com/scop/pre-commit-shfmt", "shfmt"
+        )
+        _ensure_pre_commit_repo(
+            dict_, "https://github.com/koalaman/shellcheck-precommit", "shellcheck"
         )
 
 
