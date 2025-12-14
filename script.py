@@ -92,7 +92,7 @@ class Settings:
         default=False, help="Set up 'pytest.toml' [pytest.filterwarnings]"
     )
     pytest_timeout: int | None = option(
-        default=False, help="Set up 'pytest.toml' [pytest.timeout]"
+        default=None, help="Set up 'pytest.toml' [pytest.timeout]"
     )
     ruff: bool = option(default=False, help="Set up 'ruff.toml'")
     dry_run: bool = option(default=False, help="Dry run the CLI")
@@ -140,12 +140,16 @@ def main(settings: Settings, /) -> None:
     if (include := settings.pyright_include) is not None:
         _add_pyrightconfig_include(*include, version=settings.python_version)
     if settings.pytest:
+        breakpoint()
         _add_pytest()
     if settings.pytest_asyncio:
+        breakpoint()
         _add_pytest_asyncio()
     if settings.pytest_ignore_warnings:
+        breakpoint()
         _add_pytest_ignore_warnings()
     if (timeout := settings.pytest_timeout) is not None:
+        breakpoint()
         _add_pytest_timeout(timeout)
     if settings.ruff:
         _add_ruff(version=settings.python_version)
