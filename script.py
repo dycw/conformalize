@@ -147,6 +147,16 @@ def _ensure_in_array(array: Array, /, *objs: Any) -> None:
             array.append(obj)
 
 
+def _ensure_not_in_array(array: Array, /, *objs: Any) -> None:
+    for obj in objs:
+        try:
+            index = next(i for i, o in enumerate(array) if o == obj)
+        except StopIteration:
+            pass
+        else:
+            del array[index]
+
+
 def _get_aot(obj: Container | Table, key: str, /) -> AoT:
     return ensure_class(obj.setdefault(key, aot()), AoT)
 
@@ -236,7 +246,34 @@ def _yield_ruff(
         "ISC001",  # single-line-implicit-string-concatenation
         "ISC002",  # multi-line-implicit-string-concatenation
     )
-    lint["preview"] = 1
+    _ensure_not_in_array(
+        ignore,
+        "RUF022",  # unsorted-dunder-all
+        "RUF029",  # unused-async
+        "S101",  # assert
+        "SLF001",  # private-member-access
+    )
+    lint["preview"] = True
+    select = _get_array(lint, "select")
+    _ensure_in_array(
+        select,
+        "ALL",
+        "RUF022",  # unsorted-dunder-all
+        "RUF029",  # unused-async
+    )
+    extend_ignores = _get_table(lint, "extend-per-file-ignores")
+    test_py = _get_array(extend_ignores, "test_*.py")
+    _ensure_in_array(
+        test_py,
+        "S101",  # assert
+        "SLF001",  # private-member-access
+    )
+    bugbear = _get_table(lint, "flake8-bugbear")
+    bugbear["ban-relative-imports"] = "all"
+    isort = _get_table(lint, "isort")
+    req_imps = _get_array(isort, "required-imports")
+    _ensure_in_array(req_imps, "from __future__ imoprt annotations")
+    isort["split-on-trailing-comma"] = False
     yield doc
     if doc != _get_doc(_RUFF_TOML):
         _LOGGER.info("Adding `ruff.toml` %s...", desc)
