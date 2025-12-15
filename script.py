@@ -139,7 +139,7 @@ def main(settings: Settings, /) -> None:
     if settings.github__push_tag:
         _add_github_push_tag()
     if settings.github__push_tag__major_minor:
-        _add_github_push_tag_extra("major_minor")
+        _add_github_push_tag_extra("major-minor")
     if settings.github__push_tag__major:
         _add_github_push_tag_extra("major")
     if settings.github__push_tag__latest:
