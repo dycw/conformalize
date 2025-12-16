@@ -113,7 +113,6 @@ class Settings:
     )
     pytest: bool = option(default=False, help="Set up 'pytest.toml'")
     pytest__asyncio: bool = option(default=False, help="Set up 'pytest.toml' asyncio_*")
-    pytest__coverage: bool = option(default=False, help="Set up 'pytest.toml' coverage")
     pytest__ignore_warnings: bool = option(
         default=False, help="Set up 'pytest.toml' filterwarnings"
     )
