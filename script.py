@@ -60,15 +60,15 @@ _MODIFIED = ContextVar("modified", default=False)
 @settings
 class Settings:
     code_version: str = option(default="0.1.0", help="Code version")
-    github__push_tag: bool = option(default=False, help="Set up 'push--tag.yaml'")
-    github__push_tag__major_minor: bool = option(
-        default=False, help="Set up 'push--tag.yaml' with the 'major.minor' tag"
+    github__push__tag: bool = option(default=False, help="Set up 'push.yaml'")
+    github__push__tag__major_minor: bool = option(
+        default=False, help="Set up 'push.yaml' with the 'major.minor' tag"
     )
-    github__push_tag__major: bool = option(
-        default=False, help="Set up 'push--tag.yaml' with the 'major' tag"
+    github__push__tag__major: bool = option(
+        default=False, help="Set up 'push.yaml' with the 'major' tag"
     )
-    github__push_tag__latest: bool = option(
-        default=False, help="Set up 'push--tag.yaml' with the 'latest' tag"
+    github__push__tag__latest: bool = option(
+        default=False, help="Set up 'push.yaml' with the 'latest' tag"
     )
     python_version: str = option(default="3.14", help="Python version")
     pre_commit__dockerfmt: bool = option(
@@ -138,13 +138,13 @@ def main(settings: Settings, /) -> None:
     _run_bump_my_version(version=settings.code_version)
     _run_pre_commit_update()
     _add_pre_commit()
-    if settings.github__push_tag:
+    if settings.github__push__tag:
         _add_github_push_tag()
-    if settings.github__push_tag__major_minor:
+    if settings.github__push__tag__major_minor:
         _add_github_push_tag_extra("major-minor")
-    if settings.github__push_tag__major:
+    if settings.github__push__tag__major:
         _add_github_push_tag_extra("major")
-    if settings.github__push_tag__latest:
+    if settings.github__push__tag__latest:
         _add_github_push_tag_extra("latest")
     if settings.pre_commit__dockerfmt:
         _add_pre_commit_dockerfmt()
@@ -192,13 +192,20 @@ def main(settings: Settings, /) -> None:
 
 
 def _add_github_push_tag() -> None:
-    with _yield_github_push_tag():
-        ...
+    with _yield_github_push() as dict_:
+        jobs = _get_dict(dict_, "jobs")
+        tag = _get_dict(jobs, "tag")
+        steps = _get_list(tag, "steps")
+        _ = _ensure_contains_partial(
+            steps,
+            {"name": "Tag latest commit", "uses": "dycw/action-tag-commit@latest"},
+            extra={"with": {"token": "${{ secrets.GITHUB_TOKEN }}"}},
+        )
 
 
 def _add_github_push_tag_extra(key: str, /) -> None:
-    with _yield_github_push_tag() as push_tag_dict:
-        jobs = _get_dict(push_tag_dict, "jobs")
+    with _yield_github_push() as dict_:
+        jobs = _get_dict(dict_, "jobs")
         tag = _get_dict(jobs, "tag")
         steps = _get_list(tag, "steps")
         step_dict = _get_partial_dict(
@@ -602,25 +609,14 @@ def _yield_bump_my_version(
 
 
 @contextmanager
-def _yield_github_push_tag(*, desc: str | None = None) -> Iterator[StrDict]:
-    with _yield_yaml_dict(
-        ".github/workflows/push--tag.yaml", desc=desc
-    ) as push_tag_dict:
-        push_tag_dict["name"] = "push"
-        on = _get_dict(push_tag_dict, "on")
+def _yield_github_push(*, desc: str | None = None) -> Iterator[StrDict]:
+    with _yield_yaml_dict(".github/workflows/push.yaml", desc=desc) as dict_:
+        dict_["name"] = "push"
+        on = _get_dict(dict_, "on")
         push = _get_dict(on, "push")
         branches = _get_list(push, "branches")
         _ensure_contains(branches, "master")
-        jobs = _get_dict(push_tag_dict, "jobs")
-        tag = _get_dict(jobs, "tag")
-        tag["runs-on"] = "ubuntu-latest"
-        steps = _get_list(tag, "steps")
-        _ = _ensure_contains_partial(
-            steps,
-            {"name": "Tag latest commit", "uses": "dycw/action-tag-commit@latest"},
-            extra={"with": {"token": "${{ secrets.GITHUB_TOKEN }}"}},
-        )
-        yield push_tag_dict
+        yield dict_
 
 
 @contextmanager
