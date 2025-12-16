@@ -60,6 +60,7 @@ _MODIFIED = ContextVar("modified", default=False)
 @settings
 class Settings:
     code_version: str = option(default="0.1.0", help="Code version")
+    coverage: bool = option(default=False, help="Set up '.coveragerc.toml'")
     github__push__publish: bool = option(
         default=False, help="Set up 'push.yaml' publishing"
     )
@@ -146,6 +147,8 @@ def main(settings: Settings, /) -> None:
         uv=settings.pre_commit__uv,
         uv__script=settings.pre_commit__uv__script,
     )
+    if settings.coverage:
+        _add_coveragerc_toml()
     if (
         settings.github__push__tag
         or settings.github__push__tag__major_minor
@@ -182,17 +185,36 @@ def main(settings: Settings, /) -> None:
         or settings.pytest__ignore_warnings
         or (len(settings.pytest__test_paths) >= 1)
         or (settings.pytest__timeout is not None)
+        or settings.coverage
     ):
         _add_pytest_toml(
             asyncio=settings.pytest__asyncio,
             ignore_warnings=settings.pytest__ignore_warnings,
             test_paths=settings.pytest__test_paths,
             timeout=settings.pytest__timeout,
+            coverage=settings.coverage,
+            pyproject__project__name=settings.pyproject__project__name,
         )
     if settings.ruff:
         _add_ruff_toml(version=settings.python_version)
     if _MODIFIED.get():
         sys.exit(1)
+
+
+def _add_coveragerc_toml() -> None:
+    with _yield_toml_doc(".coveragerc.toml") as doc:
+        html = _get_table(doc, "html")
+        html["directory"] = ".coverage/html"
+        report = _get_table(doc, "report")
+        exclude_also = _get_array(report, "exclude_also")
+        _ensure_contains(exclude_also, "@overload", "if TYPE_CHECKING:")
+        report["fail_under"] = 100.0
+        report["skip_covered"] = True
+        report["skip_empty"] = True
+        run = _get_table(doc, "run")
+        run["branch"] = True
+        run["data_file"] = ".coverage/data"
+        run["parallel"] = True
 
 
 def _add_github_push_yaml(
@@ -430,6 +452,8 @@ def _add_pytest_toml(
     ignore_warnings: bool = _SETTINGS.pytest__ignore_warnings,
     test_paths: list[str] = _SETTINGS.pytest__test_paths,
     timeout: int | None = _SETTINGS.pytest__timeout,
+    coverage: bool = _SETTINGS.coverage,
+    pyproject__project__name: str | None = _SETTINGS.pyproject__project__name,
 ) -> None:
     with _yield_toml_doc("pytest.toml") as doc:
         pytest = _get_table(doc, "pytest")
@@ -442,6 +466,13 @@ def _add_pytest_toml(
             "--durations=10",
             "--durations-min=10",
         )
+        if coverage and (pyproject__project__name is not None):
+            _ensure_contains(
+                addopts,
+                f"--cov={pyproject__project__name.replace('-', '_')}",
+                "--cov-config=.coveragerc.toml",
+                "--cov-report=html",
+            )
         pytest["collect_imported_tests"] = False
         pytest["empty_parameter_set_mark"] = "fail_at_collect"
         filterwarnings = _get_array(pytest, "filterwarnings")
