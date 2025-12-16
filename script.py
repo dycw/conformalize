@@ -14,6 +14,7 @@
 # ///
 from __future__ import annotations
 
+import json
 import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -140,7 +141,7 @@ def main(settings: Settings, /) -> None:
     _run_pre_commit_update()
     _add_pre_commit()
     if settings.coverage:
-        _add_coverage()
+        _add_coveragerc_toml()
     if settings.github__push__tag:
         _add_github_push_tag()
     if settings.github__push__tag__major_minor:
@@ -195,9 +196,20 @@ def main(settings: Settings, /) -> None:
         sys.exit(1)
 
 
-def _add_coverage() -> None:
-    with _yield_coverage():
-        ...
+def _add_coveragerc_toml() -> None:
+    with _yield_toml_doc(".coveragerc.toml") as doc:
+        html = _get_table(doc, "html")
+        html["directory"] = ".coverage/html"
+        report = _get_table(doc, "report")
+        exclude_also = _get_array(report, "exclude_also")
+        _ensure_contains(exclude_also, "@overload", "if TYPE_CHECKING:")
+        report["fail_under"] = 100.0
+        report["skip_covered"] = True
+        report["skip_empty"] = True
+        run = _get_table(doc, "run")
+        run["branch"] = True
+        run["data_file"] = ".coverage/data"
+        run["parallel"] = True
 
 
 def _add_github_push_publish() -> None:
@@ -733,31 +745,8 @@ def _yield_bump_my_version(
 
 
 @contextmanager
-def _yield_coverage(*, desc: str | None = None) -> Iterator[TOMLDocument]:
-    with _yield_toml_doc(".coveragerc.toml", desc=desc) as doc:
-        html = _get_table(doc, "html")
-        html["directory"] = ".coverage/html"
-        report = _get_table(doc, "report")
-        exclude_also = _get_array(report, "exclude_also")
-        _ensure_contains(exclude_also, "@overload", "if TYPE_CHECKING:")
-        report["fail_under"] = 100.0
-        report["skip_covered"] = True
-        report["skip_empty"] = True
-        run = _get_table(doc, "run")
-        run["branch"] = True
-        run["data_file"] = ".coverage/data"
-        run["parallel"] = True
-        yield doc
-
-
-@contextmanager
-def _yield_github_push(*, desc: str | None = None) -> Iterator[StrDict]:
-    with _yield_yaml_dict(".github/workflows/push.yaml", desc=desc) as dict_:
-        dict_["name"] = "push"
-        on = _get_dict(dict_, "on")
-        push = _get_dict(on, "push")
-        branches = _get_list(push, "branches")
-        _ensure_contains(branches, "master")
+def _yield_json_dict(path: PathLike, /) -> Iterator[StrDict]:
+    with _yield_write_context(path, json.loads, dict, json.dumps) as dict_:
         yield dict_
 
 
