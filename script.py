@@ -141,7 +141,13 @@ def main(settings: Settings, /) -> None:
     _run_bump_my_version(version=settings.code_version)
     _run_pre_commit_update()
     _add_pre_commit()
-    if settings.github__push__tag:
+    if (
+        settings.github__push__tag
+        or settings.github__push__tag__major_minor
+        or settings.github__push__tag__major
+        or settings.github__push__tag__latest
+        or settings.github__push__publish
+    ):
         _add_github_push_yaml(
             tag=settings.github__push__tag,
             tag_major_minor=settings.github__push__tag__major_minor,
@@ -206,7 +212,7 @@ def _add_github_push_yaml(
         branches = _get_list(push, "branches")
         _ensure_contains(branches, "master")
         jobs = _get_dict(dict_, "jobs")
-        if tag:
+        if tag or publish:
             tag_dict = _get_dict(jobs, "tag")
             tag_dict["runs-on"] = "ubuntu-latest"
             steps = _get_list(tag_dict, "steps")
@@ -294,7 +300,7 @@ def _add_pre_commit_dockerfmt() -> None:
 
 
 def _add_pre_commit_prettier() -> None:
-    with _yield_pre_commit(desc="prettier") as dict_:
+    with _yield_pre_commit() as dict_:
         _ensure_pre_commit_repo(
             dict_,
             "local",
@@ -308,13 +314,13 @@ def _add_pre_commit_prettier() -> None:
 
 def _add_pre_commit_ruff() -> None:
     url = "https://github.com/astral-sh/ruff-pre-commit"
-    with _yield_pre_commit(desc="ruff") as dict_:
+    with _yield_pre_commit() as dict_:
         _ensure_pre_commit_repo(dict_, url, "ruff-check", args=("add", ["--fix"]))
         _ensure_pre_commit_repo(dict_, url, "ruff-format")
 
 
 def _add_pre_commit_shell() -> None:
-    with _yield_pre_commit(desc="shell") as dict_:
+    with _yield_pre_commit() as dict_:
         _ensure_pre_commit_repo(
             dict_, "https://github.com/scop/pre-commit-shfmt", "shfmt"
         )
@@ -324,7 +330,7 @@ def _add_pre_commit_shell() -> None:
 
 
 def _add_pre_commit_taplo() -> None:
-    with _yield_pre_commit(desc="taplo") as dict_:
+    with _yield_pre_commit() as dict_:
         _ensure_pre_commit_repo(
             dict_,
             "https://github.com/compwa/taplo-pre-commit",
@@ -344,7 +350,7 @@ def _add_pre_commit_taplo() -> None:
 
 
 def _add_pre_commit_uv(*, script: str | None = None) -> None:
-    with _yield_pre_commit(desc="uv") as dict_:
+    with _yield_pre_commit() as dict_:
         _ensure_pre_commit_repo(
             dict_,
             "https://github.com/astral-sh/uv-pre-commit",
@@ -445,7 +451,7 @@ def _add_ruff(*, version: str = _SETTINGS.python_version) -> None:
 def _add_pyproject_dependency_groups_dev(
     *, version: str = _SETTINGS.python_version
 ) -> None:
-    with _yield_pyproject_toml(desc="[dependency-groups.dev]", version=version) as doc:
+    with _yield_pyproject_toml(version=version) as doc:
         dep_grps = _get_table(doc, "dependency-groups")
         dev = _get_array(dep_grps, "dev")
         _ensure_contains(dev, "dycw-utilities[test]")
@@ -455,7 +461,7 @@ def _add_pyproject_dependency_groups_dev(
 def _add_pyproject_project_name(
     name: str, /, *, version: str = _SETTINGS.python_version
 ) -> None:
-    with _yield_pyproject_toml(desc="project.name", version=version) as doc:
+    with _yield_pyproject_toml(version=version) as doc:
         proj = _get_table(doc, "project")
         proj["name"] = name
 
@@ -463,9 +469,7 @@ def _add_pyproject_project_name(
 def _add_pyproject_project_optional_dependencies_scripts(
     *, version: str = _SETTINGS.python_version
 ) -> None:
-    with _yield_pyproject_toml(
-        desc="[project.optional-dependencies.scripts]", version=version
-    ) as doc:
+    with _yield_pyproject_toml(version=version) as doc:
         proj = _get_table(doc, "project")
         opt_deps = _get_table(proj, "optional-dependencies")
         scripts = _get_array(opt_deps, "scripts")
@@ -475,7 +479,7 @@ def _add_pyproject_project_optional_dependencies_scripts(
 def _add_pyproject_uv_index(
     name: str, url: str, /, *, version: str = _SETTINGS.python_version
 ) -> None:
-    with _yield_pyproject_toml(desc="[tool.uv.index]", version=version) as doc:
+    with _yield_pyproject_toml(version=version) as doc:
         tool = _get_table(doc, "tool")
         uv = _get_table(tool, "uv")
         indexes = _get_aot(uv, "index")
