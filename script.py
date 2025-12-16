@@ -114,14 +114,14 @@ class Settings:
         factory=list, help="Set up 'pyrightconfig.json' [include]"
     )
     pytest: bool = option(default=False, help="Set up 'pytest.toml'")
-    pytest_asyncio: bool = option(default=False, help="Set up 'pytest.toml' asyncio_*")
-    pytest_ignore_warnings: bool = option(
+    pytest__asyncio: bool = option(default=False, help="Set up 'pytest.toml' asyncio_*")
+    pytest__ignore_warnings: bool = option(
         default=False, help="Set up 'pytest.toml' filterwarnings"
     )
-    pytest_test_paths: list[str] = option(
+    pytest__test_paths: list[str] = option(
         factory=list, help="Set up 'pytest.toml' testpaths"
     )
-    pytest_timeout: int | None = option(
+    pytest__timeout: int | None = option(
         default=None, help="Set up 'pytest.toml' timeout"
     )
     ruff: bool = option(default=False, help="Set up 'ruff.toml'")
@@ -181,15 +181,12 @@ def main(settings: Settings, /) -> None:
     if len(include := settings.pyright_include) >= 1:
         _add_pyrightconfig_include(*include, version=settings.python_version)
     if settings.pytest:
-        _add_pytest()
-    if settings.pytest_asyncio:
-        _add_pytest_asyncio()
-    if settings.pytest_ignore_warnings:
-        _add_pytest_ignore_warnings()
-    if len(test_paths := settings.pytest_test_paths) >= 1:
-        _add_pytest_test_paths(*test_paths)
-    if (timeout := settings.pytest_timeout) is not None:
-        _add_pytest_timeout(timeout)
+        _add_pytest(
+            asyncio=settings.pytest__asyncio,
+            ignore_warnings=settings.pytest__ignore_warnings,
+            test_paths=settings.pytest__test_paths,
+            timeout=settings.pytest__timeout,
+        )
     if settings.ruff:
         _add_ruff(version=settings.python_version)
     if _MODIFIED.get():
@@ -358,8 +355,32 @@ def _add_pyproject(*, version: str = _SETTINGS.python_version) -> None:
 
 
 def _add_pyrightconfig(*, version: str = _SETTINGS.python_version) -> None:
-    with _yield_pyrightconfig(version=version):
-        ...
+    with _yield_json_dict("pyrightconfig.json") as dict_:
+        dict_["deprecateTypingAliases"] = True
+        dict_["enableReachabilityAnalysis"] = False
+        dict_["pythonVersion"] = version
+        dict_["reportCallInDefaultInitializer"] = True
+        dict_["reportImplicitOverride"] = True
+        dict_["reportImplicitStringConcatenation"] = True
+        dict_["reportImportCycles"] = True
+        dict_["reportMissingSuperCall"] = True
+        dict_["reportMissingTypeArgument"] = False
+        dict_["reportMissingTypeStubs"] = False
+        dict_["reportPrivateImportUsage"] = False
+        dict_["reportPrivateUsage"] = False
+        dict_["reportPropertyTypeMismatch"] = True
+        dict_["reportUninitializedInstanceVariable"] = True
+        dict_["reportUnknownArgumentType"] = False
+        dict_["reportUnknownMemberType"] = False
+        dict_["reportUnknownParameterType"] = False
+        dict_["reportUnknownVariableType"] = False
+        dict_["reportUnnecessaryComparison"] = False
+        dict_["reportUnnecessaryTypeIgnoreComment"] = True
+        dict_["reportUnusedCallResult"] = True
+        dict_["reportUnusedImport"] = False
+        dict_["reportUnusedVariable"] = False
+        dict_["typeCheckingMode"] = "strict"
+        yield dict_
 
 
 def _add_pyrightconfig_include(
@@ -370,41 +391,47 @@ def _add_pyrightconfig_include(
         _ensure_contains(include, *paths)
 
 
-def _add_pytest() -> None:
-    with _yield_pytest():
-        ...
-
-
-def _add_pytest_asyncio() -> None:
-    with _yield_pytest(desc="filterwarnings") as doc:
+def _add_pytest(
+    *,
+    asyncio: bool = _SETTINGS.pytest__asyncio,
+    ignore_warnings: bool = _SETTINGS.pytest__ignore_warnings,
+    test_paths: list[str] = _SETTINGS.pytest__test_paths,
+    timeout: int | None = _SETTINGS.pytest__timeout,
+) -> None:
+    with _yield_toml_doc("pytest.toml") as doc:
         pytest = _get_table(doc, "pytest")
-        pytest["asyncio_default_fixture_loop_scope"] = "function"
-        pytest["asyncio_mode"] = "auto"
-
-
-def _add_pytest_ignore_warnings() -> None:
-    with _yield_pytest(desc="asyncio_*") as doc:
-        pytest = _get_table(doc, "pytest")
-        filterwarnings = _get_array(pytest, "filterwarnings")
+        addopts = _get_array(pytest, "addopts")
         _ensure_contains(
-            filterwarnings,
-            "ignore::DeprecationWarning",
-            "ignore::ResourceWarning",
-            "ignore::RuntimeWarning",
+            addopts,
+            "-ra",
+            "-vv",
+            "--color=auto",
+            "--durations=10",
+            "--durations-min=10",
         )
-
-
-def _add_pytest_test_paths(*paths: str) -> None:
-    with _yield_pytest(desc="testpaths") as doc:
-        pytest = _get_table(doc, "pytest")
-        testpaths = _get_array(pytest, "testpaths")
-        _ensure_contains(testpaths, *paths)
-
-
-def _add_pytest_timeout(timeout: int, /) -> None:
-    with _yield_pytest(desc="timeout") as doc:
-        pytest = _get_table(doc, "pytest")
-        pytest["timeout"] = str(timeout)
+        pytest["collect_imported_tests"] = False
+        pytest["empty_parameter_set_mark"] = "fail_at_collect"
+        filterwarnings = _get_array(pytest, "filterwarnings")
+        _ensure_contains(filterwarnings, "error")
+        pytest["minversion"] = "9.0"
+        pytest["strict"] = True
+        pytest["xfail_strict"] = True
+        if asyncio:
+            pytest["asyncio_default_fixture_loop_scope"] = "function"
+            pytest["asyncio_mode"] = "auto"
+        if ignore_warnings:
+            filterwarnings = _get_array(pytest, "filterwarnings")
+            _ensure_contains(
+                filterwarnings,
+                "ignore::DeprecationWarning",
+                "ignore::ResourceWarning",
+                "ignore::RuntimeWarning",
+            )
+        if len(test_paths) >= 1:
+            testpaths = _get_array(pytest, "testpaths")
+            _ensure_contains(testpaths, *test_paths)
+        if timeout is not None:
+            pytest["timeout"] = str(timeout)
 
 
 def _add_ruff(*, version: str = _SETTINGS.python_version) -> None:
@@ -718,29 +745,6 @@ def _yield_pyrightconfig(
         dict_["reportUnusedVariable"] = False
         dict_["typeCheckingMode"] = "strict"
         yield dict_
-
-
-@contextmanager
-def _yield_pytest(*, desc: str | None = None) -> Iterator[TOMLDocument]:
-    with _yield_toml_doc("pytest.toml", desc=desc) as doc:
-        pytest = _get_table(doc, "pytest")
-        addopts = _get_array(pytest, "addopts")
-        _ensure_contains(
-            addopts,
-            "-ra",
-            "-vv",
-            "--color=auto",
-            "--durations=10",
-            "--durations-min=10",
-        )
-        pytest["collect_imported_tests"] = False
-        pytest["empty_parameter_set_mark"] = "fail_at_collect"
-        filterwarnings = _get_array(pytest, "filterwarnings")
-        _ensure_contains(filterwarnings, "error")
-        pytest["minversion"] = "9.0"
-        pytest["strict"] = True
-        pytest["xfail_strict"] = True
-        yield doc
 
 
 @contextmanager
