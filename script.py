@@ -38,7 +38,7 @@ from utilities.functions import ensure_class
 from utilities.iterables import OneEmptyError, OneNonUniqueError, one
 from utilities.logging import basic_config
 from utilities.pathlib import get_repo_root
-from utilities.version import Version, parse_version
+from utilities.version import ParseVersionError, Version, parse_version
 from utilities.whenever import HOUR, get_now
 from whenever import ZonedDateTime
 from xdg_base_dirs import xdg_cache_home
@@ -727,15 +727,21 @@ def _run_bump_my_version() -> None:
         current = _get_version(doc)
     try:
         text = check_output(
-            ["git", "show", "origin/master:.bumpversion.toml"], text=True
+            ["git", "tag", "--points-at", "origin/master"], text=True
         ).rstrip("\n")
-        prev = _get_version(text)
-    except (CalledProcessError, NonExistentKey):
-        bump()
-    else:
-        patch = prev.bump_patch()
-        if current not in {patch, prev.bump_minor(), prev.bump_major()}:
+        prev = parse_version(text)
+    except (CalledProcessError, ParseVersionError):
+        try:
+            text = check_output(
+                ["git", "show", "origin/master:.bumpversion.toml"], text=True
+            ).rstrip("\n")
+            prev = _get_version(text)
+        except (CalledProcessError, ParseVersionError, NonExistentKey):
             bump()
+            return
+    patch = prev.bump_patch()
+    if current not in {patch, prev.bump_minor(), prev.bump_major()}:
+        bump()
 
 
 def _run_pre_commit_update() -> None:
