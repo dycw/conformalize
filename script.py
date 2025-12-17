@@ -570,7 +570,7 @@ def _check_versions() -> None:
     with _yield_bump_my_version() as doc:
         version = _get_version(doc)
     try:
-        _set_version(version)
+        _set_version(version, current=version)
     except CalledProcessError:
         msg = f"Inconsistent versions; got be {version}"
         raise ValueError(msg) from None
@@ -718,8 +718,8 @@ def _run_bump_my_version() -> None:
     if search("template", str(get_repo_root())):
         return
 
-    def run(version: Version, /) -> None:
-        _set_version(version)
+    def run(new: Version, /, *, current: Version | None = None) -> None:
+        _set_version(new, current=current)
         _ = _MODIFIED.set(True)
 
     with _yield_bump_my_version() as doc:
@@ -756,8 +756,12 @@ def _run_pre_commit_update() -> None:
             run()
 
 
-def _set_version(version: Version, /) -> None:
-    _ = check_call(["bump-my-version", "replace", "--new-version", str(version)])
+def _set_version(new: Version, /, *, current: Version | None = None) -> None:
+    args: list[str] = ["bump-my-version", "replace"]
+    if current is not None:
+        args.extend(["--current-version", str(current)])
+    args.extend(["--new-version", str(new)])
+    _ = check_call(args)
 
 
 @contextmanager
