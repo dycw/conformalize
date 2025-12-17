@@ -154,6 +154,7 @@ def main(settings: Settings, /) -> None:
         _add_coveragerc_toml()
     if (
         settings.github__push__publish
+        or settings.github__push__publish__trusted_publishing
         or settings.github__push__tag
         or settings.github__push__tag__major_minor
         or settings.github__push__tag__major
@@ -161,7 +162,7 @@ def main(settings: Settings, /) -> None:
     ):
         _add_github_push_yaml(
             publish=settings.github__push__publish,
-            publish_trusted_publishing=settings.github__push__publish__trusted_publishing,
+            publish__trusted_publishing=settings.github__push__publish__trusted_publishing,
             tag=settings.github__push__tag,
             tag__major_minor=settings.github__push__tag__major_minor,
             tag__major=settings.github__push__tag__major,
@@ -224,7 +225,7 @@ def _add_coveragerc_toml() -> None:
 def _add_github_push_yaml(
     *,
     publish: bool = _SETTINGS.github__push__publish,
-    publish_trusted_publishing: bool = _SETTINGS.github__push__publish__trusted_publishing,
+    publish__trusted_publishing: bool = _SETTINGS.github__push__publish__trusted_publishing,
     tag: bool = _SETTINGS.github__push__tag,
     tag__major_minor: bool = _SETTINGS.github__push__tag__major_minor,
     tag__major: bool = _SETTINGS.github__push__tag__major,
@@ -237,7 +238,7 @@ def _add_github_push_yaml(
         branches = _get_list(push, "branches")
         _ensure_contains(branches, "master")
         jobs = _get_dict(dict_, "jobs")
-        if publish:
+        if publish or publish__trusted_publishing:
             publish_dict = _get_dict(jobs, "publish")
             environment = _get_dict(publish_dict, "environment")
             environment["name"] = "pypi"
@@ -253,10 +254,10 @@ def _add_github_push_yaml(
                 },
                 extra={"with": {"token": "${{ secrets.GITHUB_TOKEN }}"}},
             )
-            if publish_trusted_publishing:
+            if publish__trusted_publishing:
                 with_ = _get_dict(steps_dict, "with")
                 with_["trusted-publishing"] = True
-        if tag:
+        if tag or tag__major_minor or tag__major or tag__latest:
             tag_dict = _get_dict(jobs, "tag")
             tag_dict["runs-on"] = "ubuntu-latest"
             steps = _get_list(tag_dict, "steps")
