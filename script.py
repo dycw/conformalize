@@ -570,12 +570,7 @@ def _check_versions() -> None:
     with _yield_bump_my_version() as doc:
         version = _get_version(doc)
     try:
-        _ = check_call([
-            "bump-my-version",
-            "replace",
-            "--current-version",
-            str(version),
-        ])
+        _set_version(version)
     except CalledProcessError:
         msg = f"Inconsistent versions; got be {version}"
         raise ValueError(msg) from None
@@ -723,8 +718,8 @@ def _run_bump_my_version() -> None:
     if search("template", str(get_repo_root())):
         return
 
-    def bump() -> None:
-        _ = check_call(["bump-my-version", "bump", "patch"])
+    def _run(version: Version, /) -> None:
+        _set_version(version)
         _ = _MODIFIED.set(True)
 
     with _yield_bump_my_version() as doc:
@@ -735,12 +730,11 @@ def _run_bump_my_version() -> None:
         ).rstrip("\n")
         prev = _get_version(text)
     except (CalledProcessError, NonExistentKey):
-        bump()
+        _run(Version(0, 1, 1))
     else:
         patch = prev.bump_patch()
         if current not in {patch, prev.bump_minor(), prev.bump_major()}:
-            _LOGGER.info("prev=%s, current=%s, patch=%s", prev, current, patch)
-            bump()
+            _run(patch)
 
 
 def _run_pre_commit_update() -> None:
@@ -760,6 +754,10 @@ def _run_pre_commit_update() -> None:
         prev = ZonedDateTime.parse_iso(text.rstrip("\n"))
         if prev < (get_now() - 12 * HOUR):
             run()
+
+
+def _set_version(version: Version, /) -> None:
+    _ = check_call(["bump-my-version", "replace", "--new-version", str(version)])
 
 
 @contextmanager
