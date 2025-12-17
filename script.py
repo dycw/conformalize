@@ -734,7 +734,6 @@ def _run_bump_my_version() -> None:
     else:
         patch = prev.bump_patch()
         if current not in {patch, prev.bump_minor(), prev.bump_major()}:
-            _LOGGER.info("prev=%s, current=%s, patch=%s", prev, current, patch)
             bump()
 
 
