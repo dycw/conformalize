@@ -794,25 +794,6 @@ def _set_version(version: Version, /) -> None:
     ])
 
 
-"""
-[tool]
-  [tool.bumpversion]
-    allow_dirty = true
-    current_version = "0.3.5"
-
-    [[tool.bumpversion.files]]
-      filename = "pyproject.toml"
-      replace = "version = \"{new_version}\""
-      search = "version = \"{current_version}\""
-
-    [[tool.bumpversion.files]]
-      filename = "src/uv_publish/__init__.py"
-      replace = "__version__ = \"{new_version}\""
-      search = "__version__ = \"{current_version}\""
-
-"""
-
-
 @contextmanager
 def _yield_bump_my_version() -> Iterator[TOMLDocument]:
     with _yield_toml_doc(".bumpversion.toml") as doc:
