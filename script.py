@@ -127,6 +127,7 @@ class Settings:
     pytest__timeout: int | None = option(
         default=None, help="Set up 'pytest.toml' timeout"
     )
+    readme: bool = option(default=False, help="Set up 'README.md'")
     ruff: bool = option(default=False, help="Set up 'ruff.toml'")
     dry_run: bool = option(default=False, help="Dry run the CLI")
 
@@ -204,6 +205,11 @@ def main(settings: Settings, /) -> None:
             timeout=settings.pytest__timeout,
             coverage=settings.coverage,
             pyproject__project__name=settings.pyproject__project__name,
+        )
+    if settings.readme:
+        _add_readme_md(
+            name=settings.pyproject__project__name,
+            description=settings.pyproject__project__description,
         )
     if settings.ruff:
         _add_ruff_toml(version=settings.python_version)
@@ -496,6 +502,19 @@ def _add_pytest_toml(
             _ensure_contains(testpaths_list, *test_paths)
         if timeout is not None:
             pytest["timeout"] = str(timeout)
+
+
+def _add_readme_md(
+    *,
+    name: str | None = _SETTINGS.pyproject__project__name,
+    description: str | None = _SETTINGS.pyproject__project__description,
+) -> None:
+    text = f"""\
+# `{name}`
+
+{description}
+"""
+    _ = Path("README.md").write_text(text)
 
 
 def _add_ruff_toml(*, version: str = _SETTINGS.python_version) -> None:
