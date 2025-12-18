@@ -154,7 +154,8 @@ def main(settings: Settings, /) -> None:
     _LOGGER.info("Running...")
     _add_bumpversion_toml(
         pyproject=settings.pyproject,
-        python_package_name=settings.python_package_name_use,
+        python_package_name=settings.python_package_name,
+        python_package_name_use=settings.python_package_name_use,
     )
     _check_versions()
     _run_bump_my_version()
@@ -230,7 +231,8 @@ def main(settings: Settings, /) -> None:
 def _add_bumpversion_toml(
     *,
     pyproject: bool = _SETTINGS.pyproject,
-    python_package_name: str | None = _SETTINGS.python_package_name_use,
+    python_package_name: str | None = _SETTINGS.python_package_name,
+    python_package_name_use: str | None = _SETTINGS.python_package_name_use,
 ) -> None:
     with _yield_bumpversion_toml() as doc:
         tool = _get_table(doc, "tool")
@@ -245,7 +247,7 @@ def _add_bumpversion_toml(
                 _ensure_aot_contains(
                     files,
                     _bumpversion_toml_file(
-                        f"src/{python_package_name}/__init__.py",
+                        f"src/{python_package_name_use}/__init__.py",
                         '__version__ = "${version}"',
                     ),
                 )
