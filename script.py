@@ -21,6 +21,7 @@ from contextvars import ContextVar
 from logging import getLogger
 from pathlib import Path
 from re import escape, search
+from string import Template
 from subprocess import CalledProcessError, check_call, check_output
 from typing import TYPE_CHECKING, Any, Literal, assert_never
 
@@ -145,6 +146,10 @@ def main(settings: Settings, /) -> None:
         _LOGGER.info("Dry run; exiting...")
         return
     _LOGGER.info("Running...")
+    _add_bumpversion_toml(
+        pyproject=settings.pyproject,
+        pyproject__project__name=settings.pyproject__project__name,
+    )
     _check_versions()
     _run_bump_my_version()
     _run_pre_commit_update()
@@ -216,6 +221,30 @@ def main(settings: Settings, /) -> None:
         _add_ruff_toml(version=settings.python_version)
     if _MODIFIED.get():
         sys.exit(1)
+
+
+def _add_bumpversion_toml(
+    *,
+    pyproject: bool = _SETTINGS.pyproject,
+    pyproject__project__name: str | None = _SETTINGS.pyproject__project__name,
+) -> None:
+    with _yield_bumpversion_toml() as doc:
+        tool = _get_table(doc, "tool")
+        bumpversion = _get_table(tool, "bumpversion")
+        if pyproject:
+            files = _get_aot(bumpversion, "files")
+            _ensure_aot_contains(
+                files,
+                _bumpversion_toml_file("pyproject.toml", 'version = "${version}"'),
+            )
+            if pyproject__project__name is not None:
+                _ensure_aot_contains(
+                    files,
+                    _bumpversion_toml_file(
+                        f"src/{pyproject__project__name}/__init__.py",
+                        '__version__ = "${version}"',
+                    ),
+                )
 
 
 def _add_coveragerc_toml() -> None:
@@ -299,7 +328,7 @@ def _add_pre_commit(
     uv: bool = _SETTINGS.pre_commit__uv,
     uv__script: str | None = _SETTINGS.pre_commit__uv__script,
 ) -> None:
-    with _yield_pre_commit() as dict_:
+    with _yield_yaml_dict(".pre-commit-config.yaml") as dict_:
         _ensure_pre_commit_repo(
             dict_, "https://github.com/dycw/pre-commit-hook-nitpick", "nitpick"
         )
@@ -606,9 +635,16 @@ def _add_ruff_toml(*, version: str = _SETTINGS.python_version) -> None:
         isort["split-on-trailing-comma"] = False
 
 
+def _bumpversion_toml_file(path: PathLike, template: str, /) -> Table:
+    tab = table()
+    tab["filename"] = str(path)
+    tab["search"] = Template(template).substitute(version="{current_version}")
+    tab["replace"] = Template(template).substitute(version="{current_version}")
+    return tab
+
+
 def _check_versions() -> None:
-    with _yield_bump_my_version() as doc:
-        version = _get_version_from_bump_toml(doc)
+    version = _get_version_from_bump_toml()
     try:
         _set_version(version)
     except CalledProcessError:
@@ -742,21 +778,24 @@ def _get_table(container: HasSetDefault, key: str, /) -> Table:
     return ensure_class(container.setdefault(key, table()), Table)
 
 
-def _get_version_from_bump_toml(obj: TOMLDocument | str, /) -> Version:
+def _get_version_from_bump_toml(*, obj: TOMLDocument | str | None = None) -> Version:
     match obj:
-        case TOMLDocument() as doc:
-            tool = _get_table(doc, "tool")
+        case TOMLDocument() as obj:
+            tool = _get_table(obj, "tool")
             bumpversion = _get_table(tool, "bumpversion")
             return parse_version(str(bumpversion["current_version"]))
-        case str() as text:
-            return _get_version_from_bump_toml(tomlkit.parse(text))
+        case str() as obj:
+            return _get_version_from_bump_toml(obj=tomlkit.parse(obj))
+        case None:
+            with _yield_bumpversion_toml() as obj:
+                return _get_version_from_bump_toml(obj=obj)
         case never:
             assert_never(never)
 
 
 def _get_version_from_git_show() -> Version:
     text = check_output(["git", "show", "origin/master:.bumpversion.toml"], text=True)
-    return _get_version_from_bump_toml(text.rstrip("\n"))
+    return _get_version_from_bump_toml(obj=text.rstrip("\n"))
 
 
 def _get_version_from_git_tag() -> Version:
@@ -785,8 +824,7 @@ def _run_bump_my_version() -> None:
         except (CalledProcessError, ParseVersionError, NonExistentKey):
             run(Version(0, 1, 0))
             return
-    with _yield_bump_my_version() as doc:
-        current = _get_version_from_bump_toml(doc)
+    current = _get_version_from_bump_toml()
     if current not in {prev.bump_patch(), prev.bump_minor(), prev.bump_major()}:
         run(prev.bump_patch())
 
@@ -821,7 +859,7 @@ def _set_version(version: Version, /) -> None:
 
 
 @contextmanager
-def _yield_bump_my_version() -> Iterator[TOMLDocument]:
+def _yield_bumpversion_toml() -> Iterator[TOMLDocument]:
     with _yield_toml_doc(".bumpversion.toml") as doc:
         tool = _get_table(doc, "tool")
         bumpversion = _get_table(tool, "bumpversion")
@@ -833,12 +871,6 @@ def _yield_bump_my_version() -> Iterator[TOMLDocument]:
 @contextmanager
 def _yield_json_dict(path: PathLike, /) -> Iterator[StrDict]:
     with _yield_write_context(path, json.loads, dict, json.dumps) as dict_:
-        yield dict_
-
-
-@contextmanager
-def _yield_pre_commit() -> Iterator[StrDict]:
-    with _yield_yaml_dict(".pre-commit-config.yaml") as dict_:
         yield dict_
 
 
