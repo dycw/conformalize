@@ -178,11 +178,13 @@ def main(settings: Settings, /) -> None:
         or (settings.pyproject__project__name is not None)
         or settings.pyproject__project__optional_dependencies__scripts
         or (len(settings.pyproject__tool__uv__indexes) >= 1)
+        or settings.readme
     ):
         _add_pyproject_toml(
             version=settings.python_version,
             project__description=settings.pyproject__project__description,
             project__name=settings.pyproject__project__name,
+            project__readme=settings.readme,
             project__optional_dependencies__scripts=settings.pyproject__project__optional_dependencies__scripts,
             tool__uv__indexes=settings.pyproject__tool__uv__indexes,
         )
@@ -383,6 +385,7 @@ def _add_pyproject_toml(
     version: str = _SETTINGS.python_version,
     project__description: str | None = _SETTINGS.pyproject__project__description,
     project__name: str | None = _SETTINGS.pyproject__project__name,
+    project__readme: bool = _SETTINGS.readme,
     project__optional_dependencies__scripts: bool = _SETTINGS.pyproject__project__optional_dependencies__scripts,
     tool__uv__indexes: list[tuple[str, str]] = _SETTINGS.pyproject__tool__uv__indexes,
 ) -> None:
@@ -396,6 +399,8 @@ def _add_pyproject_toml(
             project["description"] = project__description
         if project__name is not None:
             project["name"] = project__name
+        if project__readme:
+            project["readme"] = "README.md"
         project.setdefault("version", "0.1.0")
         dependency_groups = _get_table(doc, "dependency-groups")
         dev = _get_array(dependency_groups, "dev")
