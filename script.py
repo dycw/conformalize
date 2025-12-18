@@ -79,7 +79,7 @@ class Settings:
     github__push__tag__latest: bool = option(
         default=False, help="Set up 'push.yaml' with the 'latest' tag"
     )
-    package_name: str | None = option(default="template-action", help="Package name")
+    package_name: str | None = option(default=None, help="Package name")
     pre_commit__dockerfmt: bool = option(
         default=False, help="Set up '.pre-commit-config.yaml' dockerfmt"
     )
@@ -101,7 +101,7 @@ class Settings:
     pre_commit__uv__script: str | None = option(
         default=None, help="Set up '.pre-commit-config.yaml' uv lock script"
     )
-    pyproject: bool = option(default=True, help="Set up 'pyproject.toml'")
+    pyproject: bool = option(default=False, help="Set up 'pyproject.toml'")
     pyproject__project__optional_dependencies__scripts: bool = option(
         default=False,
         help="Set up 'pyproject.toml' [project.optional-dependencies.scripts]",
