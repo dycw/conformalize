@@ -182,7 +182,6 @@ def main(settings: Settings, /) -> None:
         or settings.pyproject__project__optional_dependencies__scripts
         or (settings.pyproject__tool__uv__build_backend is not None)
         or (len(settings.pyproject__tool__uv__indexes) >= 1)
-        or settings.readme
     ):
         _add_pyproject_toml(
             version=settings.python_version,
@@ -203,7 +202,6 @@ def main(settings: Settings, /) -> None:
         or settings.pytest__ignore_warnings
         or (len(settings.pytest__test_paths) >= 1)
         or (settings.pytest__timeout is not None)
-        or settings.coverage
     ):
         _add_pytest_toml(
             asyncio=settings.pytest__asyncio,
