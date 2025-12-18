@@ -60,6 +60,7 @@ _MODIFIED = ContextVar("modified", default=False)
 @settings
 class Settings:
     coverage: bool = option(default=False, help="Set up '.coveragerc.toml'")
+    description: str | None = option(default=None, help="Repo description")
     github__push__publish: bool = option(
         default=False, help="Set up 'push.yaml' publishing"
     )
@@ -76,7 +77,6 @@ class Settings:
     github__push__tag__latest: bool = option(
         default=False, help="Set up 'push.yaml' with the 'latest' tag"
     )
-    python_version: str = option(default="3.14", help="Python version")
     pre_commit__dockerfmt: bool = option(
         default=False, help="Set up '.pre-commit-config.yaml' dockerfmt"
     )
@@ -99,9 +99,6 @@ class Settings:
         default=None, help="Set up '.pre-commit-config.yaml' uv lock script"
     )
     pyproject: bool = option(default=False, help="Set up 'pyproject.toml'")
-    pyproject__project__description: str | None = option(
-        default=None, help="Set up 'pyproject.toml' [project.description]"
-    )
     pyproject__project__name: str | None = option(
         default=None, help="Set up 'pyproject.toml' [project.name]"
     )
@@ -130,7 +127,9 @@ class Settings:
     pytest__timeout: int | None = option(
         default=None, help="Set up 'pytest.toml' timeout"
     )
+    python_version: str = option(default="3.14", help="Python version")
     readme: bool = option(default=False, help="Set up 'README.md'")
+    repo_name: str | None = option(default=None, help="Repo name")
     ruff: bool = option(default=False, help="Set up 'ruff.toml'")
     dry_run: bool = option(default=False, help="Dry run the CLI")
 
@@ -177,7 +176,6 @@ def main(settings: Settings, /) -> None:
         )
     if (
         settings.pyproject
-        or (settings.pyproject__project__description is not None)
         or (settings.pyproject__project__name is not None)
         or settings.pyproject__project__optional_dependencies__scripts
         or (settings.pyproject__tool__uv__build_backend is not None)
@@ -185,7 +183,7 @@ def main(settings: Settings, /) -> None:
     ):
         _add_pyproject_toml(
             version=settings.python_version,
-            project__description=settings.pyproject__project__description,
+            project__description=settings.description,
             project__name=settings.pyproject__project__name,
             project__readme=settings.readme,
             project__optional_dependencies__scripts=settings.pyproject__project__optional_dependencies__scripts,
@@ -212,10 +210,7 @@ def main(settings: Settings, /) -> None:
             pyproject__project__name=settings.pyproject__project__name,
         )
     if settings.readme:
-        _add_readme_md(
-            name=settings.pyproject__project__name,
-            description=settings.pyproject__project__description,
-        )
+        _add_readme_md(name=settings.repo_name, description=settings.description)
     if settings.ruff:
         _add_ruff_toml(version=settings.python_version)
     if _MODIFIED.get():
@@ -386,7 +381,7 @@ def _add_pre_commit(
 def _add_pyproject_toml(
     *,
     version: str = _SETTINGS.python_version,
-    project__description: str | None = _SETTINGS.pyproject__project__description,
+    project__description: str | None = _SETTINGS.description,
     project__name: str | None = _SETTINGS.pyproject__project__name,
     project__readme: bool = _SETTINGS.readme,
     project__optional_dependencies__scripts: bool = _SETTINGS.pyproject__project__optional_dependencies__scripts,
@@ -522,14 +517,14 @@ def _add_pytest_toml(
 def _add_readme_md(
     *,
     name: str | None = _SETTINGS.pyproject__project__name,
-    description: str | None = _SETTINGS.pyproject__project__description,
+    description: str | None = _SETTINGS.description,
 ) -> None:
-    text = f"""\
-# `{name}`
-
-{description}
-"""
-    _ = Path("README.md").write_text(text)
+    lines: list[str] = []
+    if name is not None:
+        lines.append(f"# `{name}`")
+    if description is not None:
+        lines.append(description)
+    _ = Path("README.md").write_text("\n\n".join(lines))
 
 
 def _add_ruff_toml(*, version: str = _SETTINGS.python_version) -> None:

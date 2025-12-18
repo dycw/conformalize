@@ -1,3 +1,3 @@
-# `pre-commit-hook-nitpick`
+# `None`
 
-Pre-commit hook to nitpick your project
+None
