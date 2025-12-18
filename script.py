@@ -154,7 +154,6 @@ def main(settings: Settings, /) -> None:
     _LOGGER.info("Running...")
     _add_bumpversion_toml(
         pyproject=settings.pyproject,
-        python_package_name=settings.python_package_name,
         python_package_name_use=settings.python_package_name_use,
     )
     _check_versions()
@@ -198,6 +197,7 @@ def main(settings: Settings, /) -> None:
             package_name=settings.python_package_name_use,
             readme=settings.readme,
             optional_dependencies__scripts=settings.pyproject__project__optional_dependencies__scripts,
+            python_package_name=settings.python_package_name,
             python_package_name_use=settings.python_package_name_use,
             tool__uv__indexes=settings.pyproject__tool__uv__indexes,
         )
@@ -231,7 +231,6 @@ def main(settings: Settings, /) -> None:
 def _add_bumpversion_toml(
     *,
     pyproject: bool = _SETTINGS.pyproject,
-    python_package_name: str | None = _SETTINGS.python_package_name,
     python_package_name_use: str | None = _SETTINGS.python_package_name_use,
 ) -> None:
     with _yield_bumpversion_toml() as doc:
@@ -243,14 +242,15 @@ def _add_bumpversion_toml(
                 files,
                 _bumpversion_toml_file("pyproject.toml", 'version = "${version}"'),
             )
-            if python_package_name is not None:
-                _ensure_aot_contains(
-                    files,
-                    _bumpversion_toml_file(
-                        f"src/{python_package_name_use}/__init__.py",
-                        '__version__ = "${version}"',
-                    ),
-                )
+        if python_package_name_use is not None:
+            files = _get_aot(bumpversion, "files")
+            _ensure_aot_contains(
+                files,
+                _bumpversion_toml_file(
+                    f"src/{python_package_name_use}/__init__.py",
+                    '__version__ = "${version}"',
+                ),
+            )
 
 
 def _add_coveragerc_toml() -> None:
@@ -421,7 +421,8 @@ def _add_pyproject_toml(
     package_name: str | None = _SETTINGS.package_name,
     readme: bool = _SETTINGS.readme,
     optional_dependencies__scripts: bool = _SETTINGS.pyproject__project__optional_dependencies__scripts,
-    python_package_name_use: str | None = _SETTINGS.python_package_name,
+    python_package_name: str | None = _SETTINGS.python_package_name,
+    python_package_name_use: str | None = _SETTINGS.python_package_name_use,
     tool__uv__indexes: list[tuple[str, str]] = _SETTINGS.pyproject__tool__uv__indexes,
 ) -> None:
     with _yield_toml_doc("pyproject.toml") as doc:
@@ -445,7 +446,7 @@ def _add_pyproject_toml(
             optional_dependencies = _get_table(project, "optional-dependencies")
             scripts = _get_array(optional_dependencies, "scripts")
             _ensure_contains(scripts, "click >=8.3.1")
-        if python_package_name_use is not None:
+        if python_package_name is not None:
             tool = _get_table(doc, "tool")
             uv = _get_table(tool, "uv")
             build_backend = _get_table(uv, "build-backend")
