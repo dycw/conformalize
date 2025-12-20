@@ -870,13 +870,21 @@ def _set_version(version: Version, /) -> None:
 
 def _update_action_versions() -> None:
     try:
-        paths = list(Path(".github").rglob("**/*"))
+        paths = list(Path(".github").rglob("**/*.yaml"))
     except FileNotFoundError:
         return
-    versions = {"actions/checkout": "v6"}
+    versions = {
+        "actions/checkout": "v6",
+        "actions/setup-python": "v6",
+        "astral-sh/ruff-action": "v3",
+        "astral-sh/setup-uv": "v7",
+    }
     for path, (action, version) in product(paths, versions.items()):
         text = sub(
-            rf"(uses: {action})@.+", f"\1@{version}", path.read_text(), flags=MULTILINE
+            rf"^(\s*uses: {action})@.+$",
+            rf"\1@{version}",
+            path.read_text(),
+            flags=MULTILINE,
         )
         with _yield_yaml_dict(path) as dict_:
             dict_.clear()
