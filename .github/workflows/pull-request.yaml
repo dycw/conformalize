@@ -27,16 +27,18 @@ jobs:
           UV_PRERELEASE: ${{ inputs.prerelease }}
         run: uv run --with pytest --with pytest-xdist pytest
         shell: bash
-      strategy:
-        fail-fast: false
-        matrix:
-          os:
-            - ubuntu-latest
-          python-version:
-            - "3.13"
-          resolution:
-            - highest
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+        python-version:
+          - "3.13"
+        resolution:
+          - highest
+
 name: pull-request
+
 "on":
   pull_request:
     branches:
