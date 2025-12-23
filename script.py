@@ -67,7 +67,7 @@ class Settings:
     coverage: bool = option(default=False, help="Set up '.coveragerc.toml'")
     description: str | None = option(default=None, help="Repo description")
     github__pull_request__pytest__os__windows: bool = option(
-        default=False, help="Set up 'pull-request.yaml' pytest with Windows"
+        default=True, help="Set up 'pull-request.yaml' pytest with Windows"
     )
     github__pull_request__pytest__os__macos: bool = option(
         default=False, help="Set up 'pull-request.yaml' pytest with MacOS"
@@ -79,14 +79,14 @@ class Settings:
         default=False, help="Set up 'pull-request.yaml' pytest with Python 3.13"
     )
     github__pull_request__pytest__python_version__3_14: bool = option(
-        default=False, help="Set up 'pull-request.yaml' pytest with Python 3.14"
+        default=True, help="Set up 'pull-request.yaml' pytest with Python 3.14"
     )
     github__pull_request__pytest__resolution__highest: bool = option(
-        default=False,
+        default=True,
         help="Set up 'pull-request.yaml' pytest with the highest resolution",
     )
     github__pull_request__pytest__resolution__lowest_direct: bool = option(
-        default=False,
+        default=True,
         help="Set up 'pull-request.yaml' pytest with the lowest-direct resolution",
     )
     github__push__tag__latest: bool = option(
@@ -329,7 +329,7 @@ def _add_github_pull_request_yaml(
     pytest__timeout: int | None = _SETTINGS.pytest__timeout,
 ) -> None:
     with _yield_yaml_dict(".github/workflows/pull-request.yaml") as dict_:
-        dict_["name"]
+        dict_["name"] = "pull-request"
         on = _get_dict(dict_, "on")
         pull_request = _get_dict(on, "pull_request")
         branches = _get_list(pull_request, "branches")
@@ -354,7 +354,7 @@ def _add_github_pull_request_yaml(
             steps = _get_list(pytest_dict, "steps")
             _ = _ensure_contains_partial(
                 steps,
-                {"name": "Run pytest", "uses": "dycw/pytest@latest"},
+                {"name": "Run pytest", "uses": "dycw/action-pytest@latest"},
                 extra={
                     "with": {
                         "token": "${{ secrets.GITHUB_TOKEN }}",
@@ -366,19 +366,19 @@ def _add_github_pull_request_yaml(
             strategy_dict = _get_dict(pytest_dict, "strategy")
             strategy_dict["fail-fast"] = False
             matrix = _get_dict(strategy_dict, "matrix")
-            os = _get_array(matrix, "os")
+            os = _get_list(matrix, "os")
             if pytest__os__windows:
                 _ensure_contains(os, "windows-latest")
             if pytest__os__macos:
                 _ensure_contains(os, "macos-latest")
             if pytest__os__ubuntu:
                 _ensure_contains(os, "ubuntu-latest")
-            python_version = _get_array(matrix, "python-version")
+            python_version = _get_list(matrix, "python-version")
             if pytest__python_version__3_13:
                 _ensure_contains(python_version, "3.13")
             if pytest__python_version__3_14:
                 _ensure_contains(python_version, "3.14")
-            resolution = _get_array(matrix, "resolution")
+            resolution = _get_list(matrix, "resolution")
             if pytest__resolution__highest:
                 _ensure_contains(resolution, "highest")
             if pytest__resolution__lowest_direct:
