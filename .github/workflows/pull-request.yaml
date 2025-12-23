@@ -33,6 +33,10 @@ jobs:
     steps:
       - name: Run 'ruff'
         uses: dycw/action-ruff@latest
+      - name: Run 'ruff'
+        uses: dycw/action-ruff@latest
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 name: pull-request
 "on":
   pull_request:
