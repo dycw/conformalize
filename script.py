@@ -75,6 +75,12 @@ class Settings:
     github__pull_request__pytest__os__ubuntu: bool = option(
         default=False, help="Set up 'pull-request.yaml' pytest with Ubuntu"
     )
+    github__pull_request__pytest__python_version__3_13: bool = option(
+        default=False, help="Set up 'pull-request.yaml' pytest with Python 3.13"
+    )
+    github__pull_request__pytest__python_version__3_14: bool = option(
+        default=False, help="Set up 'pull-request.yaml' pytest with Python 3.14"
+    )
     github__pull_request__pytest__resolution__highest: bool = option(
         default=False,
         help="Set up 'pull-request.yaml' pytest with the highest resolution",
@@ -194,13 +200,20 @@ def main(settings: Settings, /) -> None:
     if settings.coverage:
         _add_coveragerc_toml()
     if (
-        settings.github__pull_request__pytest__resolution__highest
+        settings.github__pull_request__pytest__os__windows
+        or settings.github__pull_request__pytest__os__macos
+        or settings.github__pull_request__pytest__os__ubuntu
+        or settings.github__pull_request__pytest__python_version__3_13
+        or settings.github__pull_request__pytest__python_version__3_14
+        or settings.github__pull_request__pytest__resolution__highest
         or settings.github__pull_request__pytest__resolution__lowest_direct
     ):
         _add_github_pull_request_yaml(
             pytest__os__windows=settings.github__pull_request__pytest__os__windows,
-            pytest__os__mac=settings.github__pull_request__pytest__os__mac,
+            pytest__os__macos=settings.github__pull_request__pytest__os__macos,
             pytest__os__ubuntu=settings.github__pull_request__pytest__os__ubuntu,
+            pytest__python_version__3_13=settings.github__pull_request__pytest__python_version__3_13,
+            pytest__python_version__3_14=settings.github__pull_request__pytest__python_version__3_14,
             pytest__resolution__highest=settings.github__pull_request__pytest__resolution__highest,
             pytest__resolution__lowest_direct=settings.github__pull_request__pytest__resolution__lowest_direct,
             pytest__timeout=settings.pytest__timeout,
@@ -306,6 +319,11 @@ def _add_coveragerc_toml() -> None:
 
 def _add_github_pull_request_yaml(
     *,
+    pytest__os__windows: bool = _SETTINGS.github__pull_request__pytest__os__windows,
+    pytest__os__macos: bool = _SETTINGS.github__pull_request__pytest__os__macos,
+    pytest__os__ubuntu: bool = _SETTINGS.github__pull_request__pytest__os__ubuntu,
+    pytest__python_version__3_13: bool = _SETTINGS.github__pull_request__pytest__python_version__3_13,
+    pytest__python_version__3_14: bool = _SETTINGS.github__pull_request__pytest__python_version__3_14,
     pytest__resolution__highest: bool = _SETTINGS.github__pull_request__pytest__resolution__highest,
     pytest__resolution__lowest_direct: bool = _SETTINGS.github__pull_request__pytest__resolution__lowest_direct,
     pytest__timeout: int | None = _SETTINGS.pytest__timeout,
@@ -317,9 +335,54 @@ def _add_github_pull_request_yaml(
         branches = _get_list(pull_request, "branches")
         _ensure_contains(branches, "master")
         jobs = _get_dict(dict_, "jobs")
-        if tag__major_minor:
-            with_ = _get_dict(steps_dict, "with")
-            with_["major-minor"] = True
+        if (
+            pytest__os__windows
+            or pytest__os__macos
+            or pytest__os__ubuntu
+            or pytest__python_version__3_13
+            or pytest__python_version__3_14
+            or pytest__resolution__highest
+            or pytest__resolution__lowest_direct
+        ):
+            pytest_dict = _get_dict(jobs, "pytest")
+            pytest_dict["name"] = (
+                "pytest (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.resolution }})"
+            )
+            pytest_dict["runs-on"] = "${{ matrix.os }}"
+            steps = _get_list(pytest_dict, "steps")
+            _ = _ensure_contains_partial(
+                steps,
+                {"name": "Run pytest", "uses": "dycw/pytest@latest"},
+                extra={
+                    "with": {
+                        "token": "${{ secrets.GITHUB_TOKEN }}",
+                        "python-version": "${{ matrix.python-version }}",
+                        "resolution": "${{ matrix.resolution }}",
+                    }
+                },
+            )
+            strategy_dict = _get_dict(pytest_dict, "strategy")
+            strategy_dict["fail-fast"] = False
+            matrix = _get_dict(strategy_dict, "matrix")
+            os = _get_array(matrix, "os")
+            if pytest__os__windows:
+                _ensure_contains(os, "windows-latest")
+            if pytest__os__macos:
+                _ensure_contains(os, "macos-latest")
+            if pytest__os__ubuntu:
+                _ensure_contains(os, "ubuntu-latest")
+            python_version = _get_array(matrix, "python-version")
+            if pytest__python_version__3_13:
+                _ensure_contains(python_version, "3.13")
+            if pytest__python_version__3_14:
+                _ensure_contains(python_version, "3.14")
+            resolution = _get_array(matrix, "resolution")
+            if pytest__resolution__highest:
+                _ensure_contains(resolution, "highest")
+            if pytest__resolution__lowest_direct:
+                _ensure_contains(resolution, "lowest_direct")
+            if pytest__timeout is not None:
+                pytest_dict["timeout-minutes"] = max(round(pytest__timeout / 60), 1)
 
 
 def _add_github_push_yaml(
