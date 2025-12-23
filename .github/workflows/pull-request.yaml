@@ -23,8 +23,8 @@ jobs:
 
       - name: Run 'pytest'
         env:
-          UV_RESOLUTION: ${{ inputs.resolution }}
-          UV_PRERELEASE: ${{ inputs.prerelease }}
+          UV_RESOLUTION: ${{ matrix.resolution }}
+          UV_PRERELEASE: ${{ matrix.prerelease }}
         run: uv run --with pytest --with pytest-xdist pytest
         shell: bash
     strategy:
