@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import sys
 from contextlib import contextmanager, suppress
-from contextvars import ContextVar
 from itertools import product
 from logging import getLogger
 from pathlib import Path
@@ -60,10 +59,10 @@ if TYPE_CHECKING:
 type HasAppend = Array | list[Any]
 type HasSetDefault = Container | StrDict | Table
 type StrDict = dict[str, Any]
-__version__ = "0.6.19"
+__version__ = "0.6.20"
 _LOADER = EnvLoader("")
 _LOGGER = getLogger(__name__)
-_MODIFIED = ContextVar("modified", default=False)
+_MODIFICATIONS: set[str] = set()
 
 
 @settings
@@ -295,7 +294,11 @@ def _main(settings: Settings, /) -> None:
         _add_ruff_toml(version=settings.python_version)
     if not settings.skip_version_bump:
         _run_bump_my_version()
-    if _MODIFIED.get():
+    if len(_MODIFICATIONS) >= 1:
+        _LOGGER.info(
+            "Exiting due to modiciations: %s",
+            ", ".join(map(repr, sorted(_MODIFICATIONS))),
+        )
         sys.exit(1)
 
 
@@ -996,10 +999,10 @@ def _run_bump_my_version() -> None:
     if search("template", str(get_repo_root())):
         return
 
-    def run(version: Version, /) -> None:
+    def run_set_version(version: Version, /) -> None:
         _LOGGER.info("Setting version to %s...", version)
         _set_version(version)
-        _ = _MODIFIED.set(True)
+        _MODIFICATIONS.add(".bumpversion.toml")
 
     try:
         prev = _get_version_from_git_tag()
@@ -1007,24 +1010,27 @@ def _run_bump_my_version() -> None:
         try:
             prev = _get_version_from_git_show()
         except (CalledProcessError, ParseVersionError, NonExistentKey):
-            run(Version(0, 1, 0))
+            run_set_version(Version(0, 1, 0))
             return
     current = _get_version_from_bump_toml()
     if current not in {prev.bump_patch(), prev.bump_minor(), prev.bump_major()}:
-        run(prev.bump_patch())
+        run_set_version(prev.bump_patch())
 
 
 def _run_pre_commit_update() -> None:
-    path = xdg_cache_home() / "pre-commit-hook-nitpick" / get_repo_root().name
+    pre_commit_config = Path(".pre-commit-config.yaml")
+    cache = xdg_cache_home() / "pre-commit-hook-nitpick" / get_repo_root().name
 
     def run_autoupdate() -> None:
-        run("pre-commit", "autoupdate")
-        with writer(path, overwrite=True) as temp:
+        current = pre_commit_config.read_text()
+        run("pre-commit", "autoupdate", print=True)
+        with writer(cache, overwrite=True) as temp:
             _ = temp.write_text(get_now().format_iso())
-        _ = _MODIFIED.set(True)
+        if pre_commit_config.read_text() != current:
+            _MODIFICATIONS.add(str(pre_commit_config))
 
     try:
-        text = path.read_text()
+        text = cache.read_text()
     except FileNotFoundError:
         run_autoupdate()
     else:
@@ -1124,22 +1130,22 @@ def _yield_write_context[T](
 ) -> Iterator[T]:
     path = Path(path)
 
-    def run(verb: str, data: T, /) -> None:
+    def run_write(verb: str, data: T, /) -> None:
         _LOGGER.info("%s '%s'...", verb, path)
         with writer(path, overwrite=True) as temp:
             _ = temp.write_text(dumps(data))
-        _ = _MODIFIED.set(True)
+        _MODIFICATIONS.add(str(path))
 
     try:
         data = loads(path.read_text())
     except FileNotFoundError:
         yield (default := get_default())
-        run("Writing", default)
+        run_write("Writing", default)
     else:
         yield data
         current = loads(path.read_text())
         if data != current:
-            run("Modifying", data)
+            run_write("Modifying", data)
 
 
 @contextmanager
@@ -1152,24 +1158,24 @@ def _yield_yaml_dict(path: PathLike, /) -> Iterator[StrDict]:
 def _yield_text_file(path: PathLike, /) -> Iterator[Path]:
     path = Path(path)
 
-    def run(verb: str, temp: Path, /) -> None:
+    def run_write(verb: str, temp: Path, /) -> None:
         _LOGGER.info("%s '%s'...", verb, path)
         text = temp.read_text().rstrip("\n") + "\n"
         with writer(path, overwrite=True) as writer_temp:
             _ = writer_temp.write_text(text)
-        _ = _MODIFIED.set(True)
+        _MODIFICATIONS.add(str(path))
 
     try:
         current = path.read_text()
     except FileNotFoundError:
         with TemporaryFile() as temp:
             yield temp
-            run("Writing", temp)
+            run_write("Writing", temp)
     else:
         with TemporaryFile() as temp:
             yield temp
             if temp.read_text().rstrip("\n") != current.rstrip("\n"):
-                run("Writing", temp)
+                run_write("Writing", temp)
 
 
 @contextmanager
