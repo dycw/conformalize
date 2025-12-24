@@ -63,6 +63,7 @@ type HasSetDefault = Container | StrDict | Table
 type StrDict = dict[str, Any]
 __version__ = "0.7.5"
 _BUMPVERSION_TOML = Path(".bumpversion.toml")
+_COVERAGERC_TOML = Path(".coveragerc.toml")
 _LOADER = EnvLoader("")
 _LOGGER = getLogger(__name__)
 _MODIFICATIONS: set[Path] = set()
@@ -338,7 +339,7 @@ def _add_bumpversion_toml(
 
 
 def _add_coveragerc_toml() -> None:
-    with _yield_toml_doc(".coveragerc.toml") as doc:
+    with _yield_toml_doc(_COVERAGERC_TOML) as doc:
         html = _get_table(doc, "html")
         html["directory"] = ".coverage/html"
         report = _get_table(doc, "report")
@@ -735,7 +736,7 @@ def _add_pytest_toml(
             _ensure_contains(
                 addopts,
                 f"--cov={python_package_name}",
-                "--cov-config=.coveragerc.toml",
+                f"--cov-config={_COVERAGERC_TOML}",
                 "--cov-report=html",
             )
         pytest["collect_imported_tests"] = False
