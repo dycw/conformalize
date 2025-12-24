@@ -48,6 +48,7 @@ from utilities.version import ParseVersionError, Version, parse_version
 from utilities.whenever import HOUR, get_now
 from whenever import ZonedDateTime
 from xdg_base_dirs import xdg_cache_home
+from yaml import Dumper, ScalarNode, add_representer
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
@@ -59,16 +60,30 @@ if TYPE_CHECKING:
 type HasAppend = Array | list[Any]
 type HasSetDefault = Container | StrDict | Table
 type StrDict = dict[str, Any]
-__version__ = "0.6.21"
-_LOADER = EnvLoader("")
-_LOGGER = getLogger(__name__)
-_MODIFICATIONS: set[str] = set()
+__version__ = "0.6.22"
+LOADER = EnvLoader("")
+LOGGER = getLogger(__name__)
+MODIFICATIONS: set[str] = set()
+
+
+class LiteralStr(str):
+    __slots__ = ()
+
+
+def literal_str_representer(dumper: Dumper, data: Any, /) -> ScalarNode:
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+
+
+add_representer(LiteralStr, literal_str_representer)
 
 
 @settings
 class Settings:
     coverage: bool = option(default=False, help="Set up '.coveragerc.toml'")
     description: str | None = option(default=None, help="Repo description")
+    github__pull_request__pre_commit: bool = option(
+        default=False, help="Set up 'pull-request.yaml' pre-commit"
+    )
     github__pull_request__pyright: bool = option(
         default=False, help="Set up 'pull-request.yaml' pyright"
     )
@@ -177,16 +192,16 @@ class Settings:
         return None
 
 
-_SETTINGS = load_settings(Settings, [_LOADER])
+_SETTINGS = load_settings(Settings, [LOADER])
 
 
 @command(**CONTEXT_SETTINGS)
-@click_options(Settings, [_LOADER], show_envvars_in_help=True)
+@click_options(Settings, [LOADER], show_envvars_in_help=True)
 def _main(settings: Settings, /) -> None:
     if is_pytest():
         return
-    basic_config(obj=_LOGGER)
-    _LOGGER.info(
+    basic_config(obj=LOGGER)
+    LOGGER.info(
         strip_and_dedent("""
             Running 'pre-commit-hook-nitpick' (version %s) with settings:
             %s
@@ -215,7 +230,8 @@ def _main(settings: Settings, /) -> None:
     if settings.coverage:
         _add_coveragerc_toml()
     if (
-        settings.github__pull_request__pyright
+        settings.github__pull_request__pre_commit
+        or settings.github__pull_request__pyright
         or settings.github__pull_request__pytest__os__windows
         or settings.github__pull_request__pytest__os__macos
         or settings.github__pull_request__pytest__os__ubuntu
@@ -227,6 +243,7 @@ def _main(settings: Settings, /) -> None:
         or settings.github__pull_request__ruff
     ):
         _add_github_pull_request_yaml(
+            pre_commit=settings.github__pull_request__pre_commit,
             pyright=settings.github__pull_request__pyright,
             pytest__os__windows=settings.github__pull_request__pytest__os__windows,
             pytest__os__macos=settings.github__pull_request__pytest__os__macos,
@@ -294,10 +311,10 @@ def _main(settings: Settings, /) -> None:
         _add_ruff_toml(version=settings.python_version)
     if not settings.skip_version_bump:
         _run_bump_my_version()
-    if len(_MODIFICATIONS) >= 1:
-        _LOGGER.info(
+    if len(MODIFICATIONS) >= 1:
+        LOGGER.info(
             "Exiting due to modiciations: %s",
-            ", ".join(map(repr, sorted(_MODIFICATIONS))),
+            ", ".join(map(repr, sorted(MODIFICATIONS))),
         )
         sys.exit(1)
 
@@ -345,6 +362,7 @@ def _add_coveragerc_toml() -> None:
 
 def _add_github_pull_request_yaml(
     *,
+    pre_commit: bool = _SETTINGS.github__pull_request__pre_commit,
     pyright: bool = _SETTINGS.github__pull_request__pyright,
     pytest__os__windows: bool = _SETTINGS.github__pull_request__pytest__os__windows,
     pytest__os__macos: bool = _SETTINGS.github__pull_request__pytest__os__macos,
@@ -368,6 +386,25 @@ def _add_github_pull_request_yaml(
         schedule = _get_list(on, "schedule")
         _ensure_contains(schedule, {"cron": "0 0 * * *"})
         jobs = _get_dict(dict_, "jobs")
+        if pre_commit:
+            pre_commit_dict = _get_dict(jobs, "pre-commit")
+            pre_commit_dict["runs-on"] = "ubuntu-latest"
+            steps = _get_list(pre_commit_dict, "steps")
+            steps_dict = _ensure_contains_partial(
+                steps,
+                {"name": "Run 'pre-commit'", "uses": "dycw/action-pre-commit@latest"},
+                extra={
+                    "with": {
+                        "token": "${{ secrets.GITHUB_TOKEN }}",
+                        "repos": LiteralStr(
+                            strip_and_dedent("""
+                                dycw/pre-commit-hook-nitpick
+                                pre-commit/pre-commit-hooks
+                            """)
+                        ),
+                    }
+                },
+            )
         if pyright:
             pyright_dict = _get_dict(jobs, "pyright")
             pyright_dict["runs-on"] = "ubuntu-latest"
@@ -945,14 +982,14 @@ def _get_partial_dict(
         )
     except OneEmptyError:
         if not skip_log:
-            _LOGGER.exception(
+            LOGGER.exception(
                 "Expected %s to contain %s (as a partial)",
                 pretty_repr(iterable),
                 pretty_repr(dict_),
             )
         raise
     except OneNonUniqueError as error:
-        _LOGGER.exception(
+        LOGGER.exception(
             "Expected %s to contain %s uniquely (as a partial); got %s, %s and perhaps more",
             pretty_repr(iterable),
             pretty_repr(dict_),
@@ -1000,9 +1037,9 @@ def _run_bump_my_version() -> None:
         return
 
     def run_set_version(version: Version, /) -> None:
-        _LOGGER.info("Setting version to %s...", version)
+        LOGGER.info("Setting version to %s...", version)
         _set_version(version)
-        _MODIFICATIONS.add(".bumpversion.toml")
+        MODIFICATIONS.add(".bumpversion.toml")
 
     try:
         prev = _get_version_from_git_tag()
@@ -1027,7 +1064,7 @@ def _run_pre_commit_update() -> None:
         with writer(cache, overwrite=True) as temp:
             _ = temp.write_text(get_now().format_iso())
         if pre_commit_config.read_text() != current:
-            _MODIFICATIONS.add(str(pre_commit_config))
+            MODIFICATIONS.add(str(pre_commit_config))
 
     try:
         text = cache.read_text()
@@ -1077,7 +1114,7 @@ def _update_action_file_extensions() -> None:
         return
     for path in paths:
         new = path.with_suffix(".yaml")
-        _LOGGER.info("Renaming '%s' -> '%s'...", path, new)
+        LOGGER.info("Renaming '%s' -> '%s'...", path, new)
         _ = path.rename(new)
 
 
@@ -1106,11 +1143,11 @@ def _update_action_versions() -> None:
 
 def _write_path_and_modified(verb: str, src: PathLike, dest: PathLike, /) -> None:
     src, dest = map(Path, [src, dest])
-    _LOGGER.info("%s '%s'...", verb, dest)
+    LOGGER.info("%s '%s'...", verb, dest)
     text = src.read_text().rstrip("\n") + "\n"
     with writer(dest, overwrite=True) as temp:
         _ = temp.write_text(text)
-    _MODIFICATIONS.add(str(dest))
+    MODIFICATIONS.add(str(dest))
 
 
 @contextmanager
