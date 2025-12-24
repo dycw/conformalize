@@ -42,6 +42,7 @@ from utilities.iterables import OneEmptyError, OneNonUniqueError, one
 from utilities.logging import basic_config
 from utilities.os import is_pytest
 from utilities.pathlib import get_repo_root
+from utilities.pytest import IS_CI
 from utilities.subprocess import run
 from utilities.tempfile import TemporaryFile
 from utilities.text import strip_and_dedent
@@ -60,7 +61,8 @@ if TYPE_CHECKING:
 type HasAppend = Array | list[Any]
 type HasSetDefault = Container | StrDict | Table
 type StrDict = dict[str, Any]
-__version__ = "0.6.17"
+__version__ = "0.6.18"
+_LOADER = EnvLoader("")
 _LOGGER = getLogger(__name__)
 _MODIFIED = ContextVar("modified", default=False)
 
@@ -176,11 +178,11 @@ class Settings:
         return None
 
 
-_SETTINGS = load_settings(Settings, [EnvLoader("")])
+_SETTINGS = load_settings(Settings, [_LOADER])
 
 
 @command(**CONTEXT_SETTINGS)
-@click_options(Settings, [EnvLoader("")], show_envvars_in_help=True)
+@click_options(Settings, [_LOADER], show_envvars_in_help=True)
 def _main(settings: Settings, /) -> None:
     if is_pytest():
         return
@@ -198,7 +200,6 @@ def _main(settings: Settings, /) -> None:
         python_package_name_use=settings.python_package_name_use,
     )
     _check_versions()
-    _run_bump_my_version()
     _run_pre_commit_update()
     _run_ripgrep_and_sd(version=settings.python_version)
     _update_action_file_extensions()
@@ -212,6 +213,8 @@ def _main(settings: Settings, /) -> None:
         uv=settings.pre_commit__uv,
         script=settings.script,
     )
+    if not IS_CI:
+        _run_bump_my_version()
     if settings.coverage:
         _add_coveragerc_toml()
     if (
