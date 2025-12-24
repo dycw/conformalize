@@ -4,8 +4,8 @@
 # dependencies = [
 #   "click >= 8.3.1, < 8.4",
 #   "dycw-utilities >= 0.172.7, < 0.173",
-#   "pyyaml >= 6.0.3, < 6.1",
 #   "rich >= 14.2.0, < 14.3",
+#   "ruamel-yaml >=0.18.17, <0.19",
 #   "tomlkit >= 0.13.3, < 0.14",
 #   "typed-settings[attrs, click] >= 25.3.0, < 25.4",
 #   "xdg-base-dirs >= 6.0.2, < 6.1",
@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import sys
 from contextlib import contextmanager, suppress
+from io import StringIO
 from itertools import product
 from logging import getLogger
 from pathlib import Path
@@ -27,9 +28,10 @@ from subprocess import CalledProcessError
 from typing import TYPE_CHECKING, Any, Literal, assert_never
 
 import tomlkit
-import yaml
 from click import command
 from rich.pretty import pretty_repr
+from ruamel.yaml import YAML
+from ruamel.yaml.scalarstring import LiteralScalarString
 from tomlkit import TOMLDocument, aot, array, document, table
 from tomlkit.exceptions import NonExistentKey
 from tomlkit.items import AoT, Array, Table
@@ -59,16 +61,20 @@ if TYPE_CHECKING:
 type HasAppend = Array | list[Any]
 type HasSetDefault = Container | StrDict | Table
 type StrDict = dict[str, Any]
-__version__ = "0.6.21"
+__version__ = "0.7.0"
 _LOADER = EnvLoader("")
 _LOGGER = getLogger(__name__)
 _MODIFICATIONS: set[str] = set()
+_YAML = YAML()
 
 
 @settings
 class Settings:
     coverage: bool = option(default=False, help="Set up '.coveragerc.toml'")
     description: str | None = option(default=None, help="Repo description")
+    github__pull_request__pre_commit: bool = option(
+        default=True, help="Set up 'pull-request.yaml' pre-commit"
+    )
     github__pull_request__pyright: bool = option(
         default=False, help="Set up 'pull-request.yaml' pyright"
     )
@@ -215,7 +221,8 @@ def _main(settings: Settings, /) -> None:
     if settings.coverage:
         _add_coveragerc_toml()
     if (
-        settings.github__pull_request__pyright
+        settings.github__pull_request__pre_commit
+        or settings.github__pull_request__pyright
         or settings.github__pull_request__pytest__os__windows
         or settings.github__pull_request__pytest__os__macos
         or settings.github__pull_request__pytest__os__ubuntu
@@ -227,6 +234,7 @@ def _main(settings: Settings, /) -> None:
         or settings.github__pull_request__ruff
     ):
         _add_github_pull_request_yaml(
+            pre_commit=settings.github__pull_request__pre_commit,
             pyright=settings.github__pull_request__pyright,
             pytest__os__windows=settings.github__pull_request__pytest__os__windows,
             pytest__os__macos=settings.github__pull_request__pytest__os__macos,
@@ -345,6 +353,7 @@ def _add_coveragerc_toml() -> None:
 
 def _add_github_pull_request_yaml(
     *,
+    pre_commit: bool = _SETTINGS.github__pull_request__pre_commit,
     pyright: bool = _SETTINGS.github__pull_request__pyright,
     pytest__os__windows: bool = _SETTINGS.github__pull_request__pytest__os__windows,
     pytest__os__macos: bool = _SETTINGS.github__pull_request__pytest__os__macos,
@@ -368,6 +377,25 @@ def _add_github_pull_request_yaml(
         schedule = _get_list(on, "schedule")
         _ensure_contains(schedule, {"cron": "0 0 * * *"})
         jobs = _get_dict(dict_, "jobs")
+        if pre_commit:
+            pre_commit_dict = _get_dict(jobs, "pre-commit")
+            pre_commit_dict["runs-on"] = "ubuntu-latest"
+            steps = _get_list(pre_commit_dict, "steps")
+            steps_dict = _ensure_contains_partial(
+                steps,
+                {"name": "Run 'pre-commit'", "uses": "dycw/action-pre-commit@latest"},
+                extra={
+                    "with": {
+                        "token": "${{ secrets.GITHUB_TOKEN }}",
+                        "repos": LiteralScalarString(
+                            strip_and_dedent("""
+                                dycw/pre-commit-hook-nitpick
+                                pre-commit/pre-commit-hooks
+                            """)
+                        ),
+                    }
+                },
+            )
         if pyright:
             pyright_dict = _get_dict(jobs, "pyright")
             pyright_dict["runs-on"] = "ubuntu-latest"
@@ -1101,7 +1129,7 @@ def _update_action_versions() -> None:
         )
         with _yield_yaml_dict(path) as dict_:
             dict_.clear()
-            dict_.update(yaml.safe_load(text))
+            dict_.update(_YAML.load(text))
 
 
 def _write_path_and_modified(verb: str, src: PathLike, dest: PathLike, /) -> None:
@@ -1111,6 +1139,12 @@ def _write_path_and_modified(verb: str, src: PathLike, dest: PathLike, /) -> Non
     with writer(dest, overwrite=True) as temp:
         _ = temp.write_text(text)
     _MODIFICATIONS.add(str(dest))
+
+
+def _yaml_dump(obj: Any, /) -> str:
+    stream = StringIO()
+    _YAML.dump(obj, stream)
+    return stream.getvalue()
 
 
 @contextmanager
@@ -1158,7 +1192,7 @@ def _yield_write_context[T](
 
 @contextmanager
 def _yield_yaml_dict(path: PathLike, /) -> Iterator[StrDict]:
-    with _yield_write_context(path, yaml.safe_load, dict, yaml.safe_dump) as dict_:
+    with _yield_write_context(path, _YAML.load, dict, _yaml_dump) as dict_:
         yield dict_
 
 
