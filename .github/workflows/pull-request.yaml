@@ -9,8 +9,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           with-requirements: script.py
   pytest:
-    environment:
-      CI: "1"
     name:
       pytest (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.resolution
       }})
