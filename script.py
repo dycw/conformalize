@@ -3,7 +3,7 @@
 # requires-python = ">=3.13"
 # dependencies = [
 #   "click >= 8.3.1, < 8.4",
-#   "dycw-utilities >= 0.172.6, < 0.173",
+#   "dycw-utilities >= 0.172.7, < 0.173",
 #   "pyyaml >= 6.0.3, < 6.1",
 #   "rich >= 14.2.0, < 14.3",
 #   "tomlkit >= 0.13.3, < 0.14",
@@ -381,8 +381,8 @@ def _add_github_pull_request_yaml(
             or pytest__resolution__lowest_direct
         ):
             pytest_dict = _get_dict(jobs, "pytest")
-            environment = _get_dict(pytest_dict, "environment")
-            environment["CI"] = "1"
+            env = _get_dict(pytest_dict, "env")
+            env["CI"] = "1"
             pytest_dict["name"] = (
                 "pytest (${{ matrix.os }}, ${{ matrix.python-version }}, ${{ matrix.resolution }})"
             )
