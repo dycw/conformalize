@@ -61,10 +61,10 @@ if TYPE_CHECKING:
 type HasAppend = Array | list[Any]
 type HasSetDefault = Container | StrDict | Table
 type StrDict = dict[str, Any]
-__version__ = "0.7.4"
+__version__ = "0.7.5"
 _LOADER = EnvLoader("")
 _LOGGER = getLogger(__name__)
-_MODIFICATIONS: set[str] = set()
+_MODIFICATIONS: set[Path] = set()
 _YAML = YAML()
 
 
