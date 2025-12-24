@@ -40,9 +40,11 @@ from utilities.click import CONTEXT_SETTINGS
 from utilities.functions import ensure_class
 from utilities.iterables import OneEmptyError, OneNonUniqueError, one
 from utilities.logging import basic_config
+from utilities.os import is_pytest
 from utilities.pathlib import get_repo_root
 from utilities.subprocess import run
 from utilities.tempfile import TemporaryFile
+from utilities.text import strip_and_dedent
 from utilities.version import ParseVersionError, Version, parse_version
 from utilities.whenever import HOUR, get_now
 from whenever import ZonedDateTime
@@ -58,6 +60,7 @@ if TYPE_CHECKING:
 type HasAppend = Array | list[Any]
 type HasSetDefault = Container | StrDict | Table
 type StrDict = dict[str, Any]
+__version__ = "0.6.17"
 _LOGGER = getLogger(__name__)
 _MODIFIED = ContextVar("modified", default=False)
 
@@ -163,7 +166,6 @@ class Settings:
     script: str | None = option(
         default=None, help="Set up a script instead of a package"
     )
-    dry_run: bool = option(default=False, help="Dry run the CLI")
 
     @property
     def python_package_name_use(self) -> str | None:
@@ -179,11 +181,18 @@ _SETTINGS = load_settings(Settings, [EnvLoader("")])
 
 @command(**CONTEXT_SETTINGS)
 @click_options(Settings, [EnvLoader("")], show_envvars_in_help=True)
-def main(settings: Settings, /) -> None:
-    _LOGGER.info("Running with settings:\n%s", pretty_repr(settings))
-    if settings.dry_run:
-        _LOGGER.info("Dry run; exiting...")
+def _main(settings: Settings, /) -> None:
+    if is_pytest():
         return
+    basic_config(obj=_LOGGER)
+    _LOGGER.info(
+        strip_and_dedent("""
+            Running 'pre-commit-hook-nitpick' (version %s) with settings:
+            %s
+        """),
+        __version__,
+        pretty_repr(settings),
+    )
     _add_bumpversion_toml(
         pyproject=settings.pyproject,
         python_package_name_use=settings.python_package_name_use,
@@ -1167,5 +1176,4 @@ def _yield_toml_doc(path: PathLike, /) -> Iterator[TOMLDocument]:
 
 
 if __name__ == "__main__":
-    basic_config(obj=__name__)
-    main()
+    _main()
