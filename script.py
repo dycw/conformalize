@@ -1046,10 +1046,10 @@ def _run_bump_my_version() -> None:
 
     try:
         prev = _get_version_from_git_tag()
-    except CalledProcessError, ValueError:
+    except (CalledProcessError, ValueError):
         try:
             prev = _get_version_from_git_show()
-        except CalledProcessError, ParseVersionError, NonExistentKey:
+        except (CalledProcessError, ParseVersionError, NonExistentKey):
             run_set_version(Version(0, 1, 0))
             return
     current = _get_version_from_bump_toml()
