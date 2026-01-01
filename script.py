@@ -1199,10 +1199,9 @@ def _yield_write_context[T](
         yield (default := get_default())
         run_write("Writing", default)
     else:
-        data = loads(path.read_text())
+        data = loads(current)
         yield data
-        current = loads(path.read_text())
-        is_equal = current == data  # tomlkit cannot handle !=
+        is_equal = data == loads(current)  # tomlkit cannot handle !=
         if not is_equal:
             run_write("Modifying", data)
 
