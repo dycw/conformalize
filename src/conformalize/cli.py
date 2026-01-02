@@ -170,7 +170,7 @@ def _main(settings: Settings, /) -> None:
         )
     if settings.ruff:
         add_ruff_toml(modifications=modifications, version=settings.python_version)
-    if not settings.skip_version_bump:
+    if settings.run_version_bump:
         run_bump_my_version(modifications=modifications)
     if len(modifications) >= 1:
         LOGGER.info(
