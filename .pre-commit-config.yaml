@@ -75,8 +75,8 @@ repos:
         files: ^script\.py$
         args:
           - --upgrade
-          - --script=script.py
           - --resolution
           - highest
           - --prerelease
           - disallow
+          - --script=script.py
