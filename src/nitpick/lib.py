@@ -938,7 +938,7 @@ def update_action_file_extensions(
 ##
 
 
-def update_action_versions() -> None:
+def update_action_versions(*, modifications: MutableSet[Path] | None = None) -> None:
     try:
         paths = list(Path(".github").rglob("**/*.yaml"))
     except FileNotFoundError:
@@ -956,7 +956,7 @@ def update_action_versions() -> None:
             path.read_text(),
             flags=MULTILINE,
         )
-        with yield_yaml_dict(path) as dict_:
+        with yield_yaml_dict(path, modifications=modifications) as dict_:
             dict_.clear()
             dict_.update(YAML_INSTANCE.load(text))
 
@@ -1129,6 +1129,8 @@ __all__ = [
     "set_version",
     "update_action_file_extensions",
     "update_action_versions",
+    "write_text",
+    "yaml_dump",
     "yield_bumpversion_toml",
     "yield_json_dict",
     "yield_text_file",
