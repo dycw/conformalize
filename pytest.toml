@@ -1,4 +1,3 @@
-
 [pytest]
   addopts = [
     "-ra",
@@ -12,5 +11,5 @@
   filterwarnings = ["error"]
   minversion = "9.0"
   strict = true
-  testpaths = ["tests", "src/tests"]
+  testpaths = ["src/tests"]
   xfail_strict = true
