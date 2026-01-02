@@ -61,7 +61,7 @@ if TYPE_CHECKING:
 type HasAppend = Array | list[Any]
 type HasSetDefault = Container | StrDict | Table
 type StrDict = dict[str, Any]
-__version__ = "0.8.1"
+__version__ = "0.8.2"
 _BUMPVERSION_TOML = Path(".bumpversion.toml")
 _COVERAGERC_TOML = Path(".coveragerc.toml")
 _LOADER = EnvLoader("")
@@ -635,7 +635,8 @@ def _add_pre_commit(
                 files=None if script is None else rf"^{escape(script)}$",
                 args=(
                     "add",
-                    ["--upgrade"] + ([] if script is None else [f"--script={script}"]),
+                    ["--upgrade", "--resolution", "highest", "--prerelease", "disallow"]
+                    + ([] if script is None else [f"--script={script}"]),
                 ),
             )
 
