@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/dycw/pre-commit-hook-nitpick
-    rev: 0.8.2
+    rev: 0.8.3
     hooks:
       - args:
           - --description=Pre-commit hook to nitpick your project
@@ -12,17 +12,19 @@ repos:
           - --github--pull-request--pytest--resolution--highest
           - --github--pull-request--ruff
           - --github--push--tag
+          - --package-name=dycw-pre-commit-hook-nitpick
           - --pre-commit--prettier
           - --pre-commit--ruff
           - --pre-commit--taplo
           - --pre-commit--uv
+          - --pyproject
           - --pyright
           - --pytest
+          - --python-package-name=nitpick
           - --python-version=3.12
           - --readme
           - --repo-name=pre-commit-hook-nitpick
           - --ruff
-          - --script=script.py
         id: nitpick
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -72,11 +74,9 @@ repos:
     rev: 0.9.21
     hooks:
       - id: uv-lock
-        files: ^script\.py$
         args:
           - --upgrade
           - --resolution
           - highest
           - --prerelease
           - disallow
-          - --script=script.py
