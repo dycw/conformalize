@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/dycw/pre-commit-hook-nitpick
-    rev: 0.8.2
+    rev: 0.8.3
     hooks:
       - args:
           - --description=Pre-commit hook to nitpick your project
@@ -74,11 +74,9 @@ repos:
     rev: 0.9.21
     hooks:
       - id: uv-lock
-        files: ^script\.py$
         args:
           - --upgrade
           - --resolution
           - highest
           - --prerelease
           - disallow
-          - --script=script.py
