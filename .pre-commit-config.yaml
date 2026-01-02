@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/dycw/pre-commit-hook-nitpick
-    rev: 0.8.1
+    rev: 0.8.2
     hooks:
       - args:
           - --description=Pre-commit hook to nitpick your project
@@ -75,4 +75,8 @@ repos:
         files: ^script\.py$
         args:
           - --upgrade
+          - --resolution
+          - highest
+          - --prerelease
+          - disallow
           - --script=script.py
