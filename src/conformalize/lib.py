@@ -776,17 +776,18 @@ def get_list(container: HasSetDefault, key: str, /) -> list[Any]:
     return ensure_class(container.setdefault(key, []), list)
 
 
+def get_table(container: HasSetDefault, key: str, /) -> Table:
+    return ensure_class(container.setdefault(key, table()), Table)
+
+
+##
+
+
 def get_partial_dict(
     iterable: Iterable[Any], dict_: StrDict, /, *, skip_log: bool = False
 ) -> StrDict:
     try:
-        return one(
-            d
-            for d in iterable
-            if isinstance(d, dict)
-            and set(dict_).issubset(d)
-            and all(d[k] == v for k, v in dict_.items())
-        )
+        return one(i for i in iterable if _is_partial_dict(i, dict_))
     except OneEmptyError:
         if not skip_log:
             LOGGER.exception(
@@ -806,8 +807,21 @@ def get_partial_dict(
         raise
 
 
-def get_table(container: HasSetDefault, key: str, /) -> Table:
-    return ensure_class(container.setdefault(key, table()), Table)
+def _is_partial_dict(obj: Any, dict_: StrDict, /) -> bool:
+    if not isinstance(obj, dict):
+        return False
+    results: dict[str, bool] = {}
+    for key, obj_value in obj.items():
+        try:
+            dict_value = dict_[key]
+        except KeyError:
+            results[key] = False
+        else:
+            if isinstance(obj_value, dict) and isinstance(dict_value, dict):
+                results[key] = _is_partial_dict(obj_value, dict_value)
+            else:
+                results[key] = obj_value == dict_value
+    return all(results.values())
 
 
 ##
