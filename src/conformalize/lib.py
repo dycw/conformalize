@@ -196,14 +196,16 @@ def add_github_pull_request_yaml(
             pre_commit_dict = get_dict(jobs, "pre-commit")
             pre_commit_dict["runs-on"] = "ubuntu-latest"
             steps = get_list(pre_commit_dict, "steps")
-            ensure_contains(steps, run_action_pre_commit_dict(token=True))
+            ensure_contains(steps, run_action_pre_commit_dict(token_checkout=True))
         if pyright:
             pyright_dict = get_dict(jobs, "pyright")
             pyright_dict["runs-on"] = "ubuntu-latest"
             steps = get_list(pyright_dict, "steps")
             steps_dict = ensure_contains_partial(
                 steps,
-                run_action_pyright_dict(python_version=python_version, token=True),
+                run_action_pyright_dict(
+                    python_version=python_version, token_checkout=True
+                ),
             )
             if script is not None:
                 with_ = get_dict(steps_dict, "with")
@@ -295,7 +297,7 @@ def add_github_push_yaml(
             publish_dict["runs-on"] = "ubuntu-latest"
             steps = get_list(publish_dict, "steps")
             steps_dict = ensure_contains_partial(
-                steps, run_action_publish_dict(token=True)
+                steps, run_action_publish_dict(token_checkout=True)
             )
             if publish__trusted_publishing:
                 with_ = get_dict(steps_dict, "with")
@@ -709,6 +711,23 @@ def add_ruff_toml(
 ##
 
 
+def add_token_to_with_dict(
+    dict_: StrDict, key: str, /, *, token: bool | str = False
+) -> None:
+    match token:
+        case True:
+            dict_[key] = "${{secrets.GITHUB_TOKEN}}"
+        case False:
+            ...
+        case str():
+            dict_[key] = token
+        case never:
+            assert_never(never)
+
+
+##
+
+
 def check_versions() -> None:
     version = get_version_from_bumpversion_toml()
     try:
@@ -861,7 +880,9 @@ def get_version_from_git_tag() -> Version:
 ##
 
 
-def run_action_pre_commit_dict(*, token: bool = False) -> StrDict:
+def run_action_pre_commit_dict(
+    *, token_checkout: bool | str = False, token_uv: bool | str = False
+) -> StrDict:
     with_: StrDict = {
         "repos": LiteralScalarString(
             strip_and_dedent("""
@@ -870,8 +891,8 @@ def run_action_pre_commit_dict(*, token: bool = False) -> StrDict:
             """)
         )
     }
-    if token:
-        with_["token"] = "${{secrets.GITHUB_TOKEN}}"  # noqa: S105
+    add_token_to_with_dict(with_, "token-checkout", token=token_checkout)
+    add_token_to_with_dict(with_, "token-uv", token=token_uv)
     return {
         "name": "Run 'pre-commit'",
         "uses": "dycw/action-pre-commit@latest",
@@ -881,7 +902,8 @@ def run_action_pre_commit_dict(*, token: bool = False) -> StrDict:
 
 def run_action_publish_dict(
     *,
-    token: bool = False,
+    token_checkout: bool | str = False,
+    token_uv: bool | str = False,
     username: str | None = None,
     password: str | None = None,
     publish_url: str | None = None,
@@ -893,7 +915,9 @@ def run_action_publish_dict(
         "uses": "dycw/action-publish@latest",
     }
     with_: StrDict = {}
-    if token:
+    add_token_to_with_dict(with_, "token-checkout", token=token_checkout)
+    add_token_to_with_dict(with_, "token-uv", token=token_uv)
+    if token_checkout:
         with_["token"] = "${{secrets.GITHUB_TOKEN}}"  # noqa: S105
     if username is not None:
         with_["username"] = username
@@ -911,11 +935,15 @@ def run_action_publish_dict(
 
 
 def run_action_pyright_dict(
-    *, python_version: str = SETTINGS.python_version, token: bool = False
+    *,
+    python_version: str = SETTINGS.python_version,
+    token_checkout: bool | str = False,
+    token_uv: bool | str = False,
 ) -> StrDict:
     with_: StrDict = {"python-version": python_version}
-    if token:
-        with_["token"] = "${{secrets.GITHUB_TOKEN}}"  # noqa: S105
+    if token_checkout:
+        add_token_to_with_dict(with_, "token-checkout", token=token_checkout)
+        add_token_to_with_dict(with_, "token-uv", token=token_uv)
     return {
         "name": "Run 'pyright'",
         "uses": "dycw/action-pyright@latest",
@@ -923,27 +951,39 @@ def run_action_pyright_dict(
     }
 
 
-def run_action_pytest_dict(*, token: bool = False) -> StrDict:
+def run_action_pytest_dict(
+    *, token_checkout: bool | str = False, token_uv: bool | str = False
+) -> StrDict:
     with_: StrDict = {
         "python-version": "${{matrix.python-version}}",
         "resolution": "${{matrix.resolution}}",
     }
-    if token:
-        with_["token"] = "${{secrets.GITHUB_TOKEN}}"  # noqa: S105
+    add_token_to_with_dict(with_, "token-checkout", token=token_checkout)
+    add_token_to_with_dict(with_, "token-uv", token=token_uv)
     return {"name": "Run 'pytest'", "uses": "dycw/action-pytest@latest", "with": with_}
 
 
-def run_action_ruff_dict(*, token: bool = False) -> StrDict:
+def run_action_ruff_dict(
+    *, token_checkout: bool | str = False, token_ruff: bool | str = False
+) -> StrDict:
     out: StrDict = {"name": "Run 'ruff'", "uses": "dycw/action-ruff@latest"}
-    if token:
-        out["with"] = {"token": "${{secrets.GITHUB_TOKEN}}"}
+    with_: StrDict = {}
+    add_token_to_with_dict(with_, "token-checkout", token=token_checkout)
+    add_token_to_with_dict(with_, "token-ruff", token=token_ruff)
+    if len(with_) >= 1:
+        out["with"] = with_
     return out
 
 
-def run_action_tag_dict(*, token: bool = False) -> StrDict:
+def run_action_tag_dict(
+    *, token_checkout: bool | str = False, token_uv: bool | str = False
+) -> StrDict:
     out: StrDict = {"name": "Tag latest commit", "uses": "dycw/action-tag@latest"}
-    if token:
-        out["with"] = {"token": "${{secrets.GITHUB_TOKEN}}"}
+    with_: StrDict = {}
+    add_token_to_with_dict(with_, "token-checkout", token=token_checkout)
+    add_token_to_with_dict(with_, "token-uv", token=token_uv)
+    if len(with_) >= 1:
+        out["with"] = with_
     return out
 
 
@@ -1230,6 +1270,7 @@ __all__ = [
     "add_pytest_toml",
     "add_readme_md",
     "add_ruff_toml",
+    "add_token_to_with_dict",
     "check_versions",
     "ensure_aot_contains",
     "ensure_contains",
