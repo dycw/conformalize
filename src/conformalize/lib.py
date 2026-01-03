@@ -228,16 +228,7 @@ def add_github_pull_request_yaml(
             pytest_dict["runs-on"] = "${{matrix.os}}"
             steps = get_list(pytest_dict, "steps")
             steps_dict = ensure_contains_partial(
-                steps,
-                {
-                    "name": "Run 'pytest'",
-                    "uses": "dycw/action-pytest@latest",
-                    "with": {
-                        "token": "${{secrets.GITHUB_TOKEN}}",
-                        "python-version": "${{matrix.python-version}}",
-                        "resolution": "${{matrix.resolution}}",
-                    },
-                },
+                steps, run_action_pytest_dict(token=True)
             )
             if script is not None:
                 with_ = get_dict(steps_dict, "with")
@@ -272,14 +263,7 @@ def add_github_pull_request_yaml(
             ruff_dict = get_dict(jobs, "ruff")
             ruff_dict["runs-on"] = "ubuntu-latest"
             steps = get_list(ruff_dict, "steps")
-            ensure_contains(
-                steps,
-                {
-                    "name": "Run 'ruff'",
-                    "uses": "dycw/action-ruff@latest",
-                    "with": {"token": "${{secrets.GITHUB_TOKEN}}"},
-                },
-            )
+            ensure_contains(steps, run_action_ruff_dict(token=True))
 
 
 ##
@@ -311,12 +295,7 @@ def add_github_push_yaml(
             publish_dict["runs-on"] = "ubuntu-latest"
             steps = get_list(publish_dict, "steps")
             steps_dict = ensure_contains_partial(
-                steps,
-                {
-                    "name": "Build and publish package",
-                    "uses": "dycw/action-publish@latest",
-                    "with": {"token": "${{secrets.GITHUB_TOKEN}}"},
-                },
+                steps, run_action_publish_dict(token=True)
             )
             if publish__trusted_publishing:
                 with_ = get_dict(steps_dict, "with")
@@ -325,14 +304,7 @@ def add_github_push_yaml(
             tag_dict = get_dict(jobs, "tag")
             tag_dict["runs-on"] = "ubuntu-latest"
             steps = get_list(tag_dict, "steps")
-            steps_dict = ensure_contains_partial(
-                steps,
-                {
-                    "name": "Tag latest commit",
-                    "uses": "dycw/action-tag@latest",
-                    "with": {"token": "${{secrets.GITHUB_TOKEN}}"},
-                },
-            )
+            steps_dict = ensure_contains_partial(steps, run_action_tag_dict(token=True))
             if tag__major_minor:
                 with_ = get_dict(steps_dict, "with")
                 with_["major-minor"] = True
@@ -893,6 +865,17 @@ def run_action_pre_commit_dict(*, token: bool = False) -> StrDict:
     }
 
 
+def run_action_publish_dict(*, token: bool = False) -> StrDict:
+    with_: StrDict = {}
+    if token:
+        with_["token"] = "${{secrets.GITHUB_TOKEN}}"  # noqa: S105
+    return {
+        "name": "Build and publish package",
+        "uses": "dycw/action-publish@latest",
+        "with": with_,
+    }
+
+
 def run_action_pyright_dict(
     *, python_version: str = SETTINGS.python_version, token: bool = False
 ) -> StrDict:
@@ -902,6 +885,34 @@ def run_action_pyright_dict(
     return {
         "name": "Run 'pyright'",
         "uses": "dycw/action-pyright@latest",
+        "with": with_,
+    }
+
+
+def run_action_pytest_dict(*, token: bool = False) -> StrDict:
+    with_: StrDict = {
+        "python-version": "${{matrix.python-version}}",
+        "resolution": "${{matrix.resolution}}",
+    }
+    if token:
+        with_["token"] = "${{secrets.GITHUB_TOKEN}}"  # noqa: S105
+    return {"name": "Run 'pytest'", "uses": "dycw/action-pytest@latest", "with": with_}
+
+
+def run_action_ruff_dict(*, token: bool = False) -> StrDict:
+    with_: StrDict = {}
+    if token:
+        with_["token"] = "${{secrets.GITHUB_TOKEN}}"  # noqa: S105
+    return {"name": "Run 'ruff'", "uses": "dycw/action-ruff@latest", "with": with_}
+
+
+def run_action_tag_dict(*, token: bool = False) -> StrDict:
+    with_: StrDict = {}
+    if token:
+        with_["token"] = "${{secrets.GITHUB_TOKEN}}"  # noqa: S105
+    return {
+        "name": "Tag latest commit",
+        "uses": "dycw/action-tag@latest",
         "with": with_,
     }
 
@@ -1204,6 +1215,11 @@ __all__ = [
     "get_version_from_git_show",
     "get_version_from_git_tag",
     "run_action_pre_commit_dict",
+    "run_action_publish_dict",
+    "run_action_pyright_dict",
+    "run_action_pytest_dict",
+    "run_action_ruff_dict",
+    "run_action_tag_dict",
     "run_bump_my_version",
     "run_pre_commit_update",
     "run_ripgrep_and_replace",
