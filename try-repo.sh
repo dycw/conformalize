@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 
 PATH_DIR="$(
 	cd -- "$(dirname "$0")" >/dev/null 2>&1 || exit
